@@ -1,8 +1,9 @@
 import pygame
 import sys
 import os
+import random
 import state
-from ui import MenuUI, GameOverUI, EndingUI
+from ui import MenuUI, GameOverUI, EndingUI, StoryUI
 from biome import BiomeManager
 from player import Player
 from monster import MonsterManager
@@ -17,8 +18,8 @@ class Camera:
         self.width = width
         self.height = height
         self.y = 300
-        self.target_y = 300
         self.look_ahead = 0
+        self.shake = 0
         
     def update(self, player_rect, current_speed, dt):
         # O player X é fixo na tela em ~100 mais variações de dash/momentum
@@ -32,6 +33,9 @@ class Camera:
         # Look ahead horizontal baseado na velocidade
         target_look_ahead = current_speed * 0.12
         self.look_ahead += (target_look_ahead - self.look_ahead) * 2.0 * dt
+        
+        # Shake decay
+        self.shake *= 0.9
 
 def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
     biome_manager.reset()
@@ -53,8 +57,8 @@ def main():
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Alto's Runner")
     clock = pygame.time.Clock()
-    
     menu_ui = MenuUI(WIDTH, HEIGHT)
+    story_ui = StoryUI(WIDTH, HEIGHT)
     game_over_ui = GameOverUI(WIDTH, HEIGHT)
     biome_manager = BiomeManager()
     bg_manager = BackgroundManager()
@@ -66,11 +70,16 @@ def main():
         pygame.mixer.init()
         # Se o usuário tiver um arquivo de som "sing.wav", ele tocará
         # Caso contrário, ignoramos para não quebrar o jogo
-        sing_sound = None
-        if os.path.exists("assets/sing.wav"):
-            sing_sound = pygame.mixer.Sound("assets/sing.wav")
+        wind_sound = None
+        if os.path.exists("assets/wind.wav"):
+            wind_sound = pygame.mixer.Sound("assets/wind.wav")
+            wind_sound.play(-1)
+            wind_sound.set_volume(0)
     except:
         sing_sound = None
+        wind_sound = None
+        
+    current_wind_volume = 0.0
     
     initial_y = biome_manager.get_ground_height(100 + biome_manager.camera_offset)
     if initial_y is None: initial_y = 400
@@ -101,6 +110,12 @@ def main():
                     jump_pressed = True
                 elif event.key == pygame.K_x or event.key == pygame.K_LCTRL:
                     dash_pressed = True
+                elif event.key == pygame.K_r and state.current_state == state.GameState.GAME_OVER:
+                    state.current_state = state.GameState.PLAYING
+                    reset_game(player, monster_manager, biome_manager, bg_manager, camera)
+                elif event.key == pygame.K_RETURN and state.current_state == state.GameState.STORY:
+                    state.current_state = state.GameState.PLAYING
+                    reset_game(player, monster_manager, biome_manager, bg_manager, camera)
                     
         keys = pygame.key.get_pressed()
 
@@ -114,11 +129,6 @@ def main():
                 new_state = menu_ui.handle_click(click_pos)
                 if new_state:
                     state.current_state = getattr(state.GameState, new_state)
-                    if state.current_state == state.GameState.PLAYING:
-                        reset_game(player, monster_manager, biome_manager, bg_manager, camera)
-                        
-                    if state.current_state == state.GameState.PLAYING:
-                        reset_game(player, monster_manager, biome_manager, bg_manager, camera)
                         
         elif state.current_state == state.GameState.GAME_OVER:
             if click_pos:
@@ -146,6 +156,13 @@ def main():
             if not hasattr(state, 'smooth_speed'): state.smooth_speed = raw_total_speed
             state.smooth_speed += (raw_total_speed - state.smooth_speed) * 0.8 * dt
             total_speed = state.smooth_speed
+            
+            # VENTO DINÂMICO
+            if wind_sound:
+                wind_target_volume = min(total_speed / 700.0, 1.0)
+                if not player.is_grounded: wind_target_volume *= 1.5 # Vento mais forte no ar
+                current_wind_volume += (wind_target_volume - current_wind_volume) * 2.0 * dt
+                wind_sound.set_volume(min(current_wind_volume * 0.5, 1.0))
             
             # 0. VERIFICAR SE O BAÚ FOI ATINGIDO (Transição para Ending)
             collision_result = monster_manager.check_collision(player.rect)
@@ -178,39 +195,54 @@ def main():
             
             # 2. UPDATES
             player.update(dt, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.get_ground_slope)
+            
+            # 2.5 EVENTOS DE POUSO E RASTROS
+            if player.just_landed:
+                camera.shake = min(player.impact_force * 0.012, 12)
+                offset_y = (HEIGHT * 0.6) - camera.y
+                particle_manager.spawn_landing_particles(player.rect.centerx, player.rect.bottom + offset_y, player.impact_force)
+                
+            particle_manager.update_trail(player.is_grounded, player.rect.centerx + biome_manager.camera_offset, player.rect.bottom, current_biome.name)
+            
             camera.update(player.rect, total_speed, dt)
             monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.start_phase)
             particle_manager.update(dt, current_biome.name)
             
-            # 1. VERIFICAR MORTE (COLISÃO OU QUEDA)
-            # A queda é baseada na posição vertical relativa à câmera (screen y)
-            player_screen_y = player.rect.centery + ((HEIGHT * 0.6) - camera.y)
-            
-            if collision_result == True or player_screen_y > HEIGHT + 100:
+            # 1. VERIFICAR MORTE (COLISÃO OU QUEDA NO BURACO)
+            if collision_result == True or player.fall_timer > 0.5:
                 state.current_state = state.GameState.GAME_OVER
                 
             # 3. VERIFICAR SPAWN DO BAÚ FINAL (No final do 3º Bioma)
-            # Spawn quando estiver no bioma 3 (Snow) e após percorrer a distância final
-            # Usando time_elapsed como proxy para distância (6s * 400px/s ~= 2400 units)
-            if biome_manager.current_idx == 2 and biome_manager.time_elapsed > 6 and not monster_manager.final_chest:
-                # Procurar terreno plano à frente
+            time_left = biome_manager.transition_time - biome_manager.time_elapsed
+            if biome_manager.current_idx == 2 and time_left <= 5 and not monster_manager.final_chest:
                 spawn_x = biome_manager.camera_offset + 900
                 slope = biome_manager.get_ground_slope(spawn_x)
-                if abs(slope) < 0.05: # Terreno plano
-                    ground_y = biome_manager.get_ground_height(spawn_x)
-                    if ground_y:
-                        monster_manager.spawn_final_chest(spawn_x, ground_y)
+                
+                # Evitar spawn em inclinação extrema
+                if abs(slope) > 0.8:
+                    spawn_x += 200  # procura área mais plana
+                    
+                ground_y = biome_manager.get_ground_height(spawn_x)
+                if ground_y is not None:
+                    monster_manager.spawn_final_chest(spawn_x, ground_y)
 
         # 3. RENDERING
         if state.current_state == state.GameState.MENU:
             menu_ui.draw(screen)
             
+        elif state.current_state == state.GameState.STORY:
+            story_ui.draw(screen)
+            
         elif state.current_state == state.GameState.PLAYING:
+            shake_y = random.uniform(-camera.shake, camera.shake) if camera.shake > 0.1 else 0
+            draw_camera_y = camera.y + shake_y
+            
             bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
+            biome_manager.draw_ground(screen, draw_camera_y)
+            particle_manager.draw_trail(screen, biome_manager.camera_offset, draw_camera_y)
             particle_manager.draw(screen)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            monster_manager.draw(screen, draw_camera_y)
+            player.draw(screen, draw_camera_y)
             
             font = pygame.font.Font(None, 36)
             score_text = font.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))

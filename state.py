@@ -1,5 +1,6 @@
 class GameState:
     MENU = "MENU"
+    STORY = "STORY"
     PLAYING = "PLAYING"
     GAME_OVER = "GAME_OVER"
     ENDING = "ENDING"

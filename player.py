@@ -18,6 +18,11 @@ class Player:
         self.jump_count = 0
         self.max_jumps = 2
         self.is_grounded = False
+        self.was_in_air = False
+        self.just_landed = False
+        self.impact_force = 0
+        self.falling_into_hole = False
+        self.fall_timer = 0
         
         # ESTAMINA
         self.max_stamina = 100
@@ -131,18 +136,31 @@ class Player:
         self.rect.y += self.vy * dt
         
         # CHECAGEM DO CHÃO
+        self.was_in_air = not self.is_grounded
+        vy_before_landing = self.vy
+        self.just_landed = False
+        
         current_ground_y = get_ground_height(world_x)
         if current_ground_y is not None:
+            self.falling_into_hole = False
+            self.fall_timer = 0
             if self.rect.bottom >= current_ground_y:
                 self.rect.bottom = current_ground_y
                 if self.vy > 0:
                     self.vy = 0
+                if self.was_in_air:
+                    self.just_landed = True
+                    self.impact_force = abs(vy_before_landing)
                 self.is_grounded = True
                 self.jump_count = 0 # Reseta os pulos ao tocar o chão
             else:
                 self.is_grounded = False
         else:
             self.is_grounded = False
+            self.falling_into_hole = True
+            
+        if self.falling_into_hole:
+            self.fall_timer += dt
             
     def draw(self, surface, camera_y):
         # Deslocamento vertical da câmera

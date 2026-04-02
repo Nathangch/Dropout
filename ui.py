@@ -26,7 +26,7 @@ class MenuUI:
         
     def handle_click(self, mouse_pos):
         if self.btn_iniciar.is_clicked(mouse_pos):
-            return "PLAYING"
+            return "STORY"
         if self.btn_sair.is_clicked(mouse_pos):
             return "EXIT"
         return None
@@ -40,6 +40,38 @@ class MenuUI:
         
         self.btn_iniciar.draw(surface)
         self.btn_sair.draw(surface)
+
+class StoryUI:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+        self.font_text = pygame.font.Font(None, 36)
+        self.story_text = [
+            "Era uma vez um bode...",
+            "amaldiçoado por uma bruxa a falar apenas cantando.",
+            "",
+            "Cansado de sua condição, ele parte em uma jornada.",
+            "",
+            "Através de montanhas e perigos,",
+            "ele busca a cura para sua maldição.",
+            "",
+            "Atravesse os biomas, ganhe velocidade,",
+            "e encontre o artefato perdido."
+        ]
+        
+    def draw(self, surface):
+        surface.fill((10, 10, 20))
+        center_x = self.width // 2
+        
+        for i, line in enumerate(self.story_text):
+            text_surf = self.font_text.render(line, True, (255, 255, 255))
+            text_rect = text_surf.get_rect(center=(center_x, 150 + i * 40))
+            surface.blit(text_surf, text_rect)
+            
+        if (pygame.time.get_ticks() // 500) % 2 == 0:
+            prompt_surf = self.font_text.render("Pressione ENTER para continuar", True, (200, 200, 200))
+            prompt_rect = prompt_surf.get_rect(center=(center_x, 500))
+            surface.blit(prompt_surf, prompt_rect)
 
 class GameOverUI:
     def __init__(self, width, height):
@@ -65,6 +97,11 @@ class GameOverUI:
         title_surf = title_font.render("GAME OVER", True, (255, 50, 50))
         title_rect = title_surf.get_rect(center=(surface.get_width()//2, surface.get_height()//4))
         surface.blit(title_surf, title_rect)
+        
+        sub_font = pygame.font.Font(None, 36)
+        sub_surf = sub_font.render("Pressione R para reiniciar", True, (200, 200, 200))
+        sub_rect = sub_surf.get_rect(center=(surface.get_width()//2, surface.get_height()//4 + 50))
+        surface.blit(sub_surf, sub_rect)
         
         self.btn_reiniciar.draw(surface)
         self.btn_sair.draw(surface)

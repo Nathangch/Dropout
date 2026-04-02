@@ -2,7 +2,7 @@ import pygame
 import random
 
 class Particle:
-    def __init__(self, x, y, vx, vy, size, lifetime, color):
+    def __init__(self, x, y, vx, vy, size, lifetime, color, gravity=0.2):
         self.x = x
         self.y = y
         self.vx = vx
@@ -11,10 +11,12 @@ class Particle:
         self.lifetime = lifetime
         self.max_lifetime = lifetime
         self.color = color
+        self.gravity = gravity
 
     def update(self, dt):
         self.x += self.vx * 60 * dt
         self.y += self.vy * 60 * dt
+        self.vy += self.gravity * 60 * dt
         self.lifetime -= 60 * dt
 
     def draw(self, screen):
@@ -33,7 +35,8 @@ class ParticleManager:
         self.width = width
         self.height = height
         self.particles = []
-        self.max_particles = 100
+        self.trail = []
+        self.max_particles = 150
         self.spawn_timer = 0
 
     def spawn_particle(self, biome_name):
@@ -76,7 +79,25 @@ class ParticleManager:
             vy = random.uniform(-6, -1)
             size = random.randint(3, 7)
             lifetime = random.randint(40, 100)
-            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color))
+            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color, gravity=0.2))
+
+    def spawn_landing_particles(self, x, y, impact_force):
+        # Escala o número de partículas baseado na força de forma razoável
+        particle_count = min(int(impact_force * 0.05), 40)
+        
+        for _ in range(particle_count):
+            vx = random.uniform(-2, 2)
+            vy = random.uniform(-3, -1)
+            size = random.randint(2, 4)
+            lifetime = random.randint(20, 40)
+            self.particles.append(Particle(x, y, vx, vy, size, lifetime, (200, 200, 200), gravity=0.2))
+
+    def update_trail(self, is_grounded, world_x, ground_y, current_biome_name):
+        if is_grounded and current_biome_name == "snow":
+            self.trail.append((world_x, ground_y))
+            
+        if len(self.trail) > 200:
+            self.trail.pop(0)
 
     def update(self, dt, biome_name):
         self.spawn_timer += dt
@@ -92,4 +113,14 @@ class ParticleManager:
     def draw(self, screen):
         for p in self.particles:
             p.draw(screen)
+
+    def draw_trail(self, screen, camera_offset, camera_y):
+        offset_y = (screen.get_height() * 0.6) - camera_y
+        for point in self.trail:
+            draw_x = point[0] - camera_offset
+            draw_y = point[1] + offset_y
+            
+            # Desenha apenas se estiver na tela para melhor performance
+            if -10 < draw_x < screen.get_width() + 10:
+                pygame.draw.circle(screen, (220, 220, 255), (int(draw_x), int(draw_y)), 2)
 

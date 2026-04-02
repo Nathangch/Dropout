@@ -106,7 +106,7 @@ class MonsterManager:
             m.update(dt, camera_offset, get_ground_height)
             
         if self.final_chest:
-            self.final_chest.update(camera_offset)
+            self.final_chest.update(camera_offset, get_ground_height)
             
         self.monsters = [m for m in self.monsters if m.rect.right > 0 and m.rect.top < 1200]
         
@@ -153,9 +153,19 @@ class Chest:
         self.opened = False
         self.glow_timer = 0
         
-    def update(self, camera_offset):
+    def update(self, camera_offset, get_ground_height=None):
         self.rect.centerx = self.world_x - camera_offset
         self.glow_timer += 0.05
+        
+        # Garante que não flutue/afunde se o relevo mudar
+        if get_ground_height is not None:
+            current_y = get_ground_height(self.world_x)
+            if current_y is not None:
+                # Proteção extra
+                if abs(current_y - self.ground_y) > 5:
+                    self.ground_y = current_y
+                self.ground_y = current_y
+                self.rect.bottom = self.ground_y
         
     def draw(self, surface, camera_y):
         offset_y = (surface.get_height() * 0.6) - camera_y
