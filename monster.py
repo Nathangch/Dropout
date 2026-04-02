@@ -35,7 +35,8 @@ class Monster:
             self.vx = 0
             
     def load_sprites(self):
-        path = f"assets/enemies/{self.m_type}/"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(script_dir, "assets", "enemies", self.m_type)
         if os.path.exists(path):
             for file in sorted(os.listdir(path)):
                 if file.endswith('.png'):
@@ -78,11 +79,12 @@ class Monster:
         self.animate()
         self.move(dt, camera_offset, get_ground_height)
                 
-    def draw(self, surface, camera_y):
+    def draw(self, surface, camera_y, camera_offset):
         offset_y = (surface.get_height() * 0.6) - camera_y
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
-        surface.blit(self.image, screen_rect)
+        screen_x = self.world_x - camera_offset
+        screen_y = self.rect.y + offset_y
+        
+        surface.blit(self.image, (screen_x - self.rect.width//2, screen_y))
 
 class MonsterManager:
     def __init__(self):
@@ -94,10 +96,15 @@ class MonsterManager:
         self.monsters.clear()
         self.spawn_timer = 0
         self.final_chest = None
+
+    def clear(self):
+        # Limpa todos os monstros ativos imediatamente (ex: início de avalanche)
+        self.monsters.clear()
         
     def update(self, dt, current_biome, current_speed, camera_offset, get_ground_height, start_phase=False):
+        import state # Dynamic import to avoid circular dependency
         self.spawn_timer -= dt
-        if self.spawn_timer <= 0 and not start_phase and not self.final_chest:
+        if self.spawn_timer <= 0 and not start_phase and not self.final_chest and not state.avalanche_active:
             self.spawn(current_biome, camera_offset, get_ground_height)
             base_time = 1.0 + (300 / current_speed)
             self.spawn_timer = base_time + random.uniform(0.1, 1.2)
@@ -136,11 +143,11 @@ class MonsterManager:
                 return True
         return False
         
-    def draw(self, surface, camera_y):
+    def draw(self, surface, camera_y, camera_offset):
         for m in self.monsters:
-            m.draw(surface, camera_y)
+            m.draw(surface, camera_y, camera_offset)
         if self.final_chest:
-            self.final_chest.draw(surface, camera_y)
+            self.final_chest.draw(surface, camera_y, camera_offset)
 
 class Chest:
     def __init__(self, world_x, ground_y):
@@ -167,40 +174,42 @@ class Chest:
                 self.ground_y = current_y
                 self.rect.bottom = self.ground_y
         
-    def draw(self, surface, camera_y):
+    def draw(self, surface, camera_y, camera_offset):
         offset_y = (surface.get_height() * 0.6) - camera_y
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
         
-        # 1. Pulsing Glow
+        screen_x = self.world_x - camera_offset
+        screen_y = self.rect.y + offset_y
+        
+        # 1. Pulsing Glow (Centralizado em screen_x)
         pulse = math.sin(self.glow_timer) * 10
         glow_size = 120 + pulse
         glow_surf = pygame.Surface((int(glow_size), int(glow_size)), pygame.SRCALPHA)
         color = (255, 255, 100, 80) if not self.opened else (100, 255, 100, 50)
         pygame.draw.circle(glow_surf, color, (int(glow_size//2), int(glow_size//2)), int(glow_size//2.5))
-        surface.blit(glow_surf, (screen_rect.centerx - glow_size//2, screen_rect.centery - glow_size//2), special_flags=pygame.BLEND_ALPHA_SDL2)
+        surface.blit(glow_surf, (screen_x - glow_size//2, screen_y + self.height//2 - glow_size//2), special_flags=pygame.BLEND_ALPHA_SDL2)
         
         # 2. Chest Body
         body_color = (139, 69, 19) # Golden wood
         if self.opened: body_color = (80, 40, 10)
         
-        pygame.draw.rect(surface, body_color, screen_rect, border_radius=3)
-        pygame.draw.rect(surface, (0, 0, 0), screen_rect, 2, border_radius=3)
+        chest_rect = pygame.Rect(screen_x - self.width//2, screen_y, self.width, self.height)
+        pygame.draw.rect(surface, body_color, chest_rect, border_radius=3)
+        pygame.draw.rect(surface, (0, 0, 0), chest_rect, 2, border_radius=3)
         
         # Detail: Lid
-        lid_rect = pygame.Rect(screen_rect.x, screen_rect.y, screen_rect.width, 15)
+        lid_rect = pygame.Rect(chest_rect.x, chest_rect.y, chest_rect.width, 15)
         if self.opened:
             lid_rect.y -= 10
             # Draw treasures inside
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx - 10, screen_rect.y + 10), 5)
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx + 10, screen_rect.y + 10), 4)
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx, screen_rect.y + 5), 6)
+            pygame.draw.circle(surface, (255, 215, 0), (chest_rect.centerx - 10, chest_rect.y + 10), 5)
+            pygame.draw.circle(surface, (255, 215, 0), (chest_rect.centerx + 10, chest_rect.y + 10), 4)
+            pygame.draw.circle(surface, (255, 215, 0), (chest_rect.centerx, chest_rect.y + 5), 6)
             
         pygame.draw.rect(surface, (101, 67, 33), lid_rect, border_radius=3)
         pygame.draw.rect(surface, (0, 0, 0), lid_rect, 2, border_radius=3)
         
         # Lock
-        lock_rect = pygame.Rect(screen_rect.centerx - 5, lid_rect.bottom - 5, 10, 10)
+        lock_rect = pygame.Rect(chest_rect.centerx - 5, lid_rect.bottom - 5, 10, 10)
         pygame.draw.rect(surface, (255, 215, 0), lock_rect)
         pygame.draw.rect(surface, (0, 0, 0), lock_rect, 1)
 

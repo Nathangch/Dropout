@@ -19,7 +19,7 @@ class Background:
             else:
                 # Fallback empty surface
                 surface = pygame.Surface((800, 600), pygame.SRCALPHA)
-                surface.fill((255, 0, 255)) # erro visual
+                surface.fill((30, 30, 50)) # Azul escuro neutro em vez de pink
                 self.layers.append(surface)
             self.offsets.append(0)
             
@@ -40,18 +40,20 @@ class Background:
             else:
                 layer.set_alpha(255)
             
-            surface.blit(layer, (x, 0))
-            if x + width < surface.get_width():
-                surface.blit(layer, (x + width, 0))
+            # Repetir o desenho para cobrir toda a largura da superfície (importante para o zoom-out)
+            while x < surface.get_width():
+                surface.blit(layer, (x, 0))
+                x += width
 
 
 class BackgroundManager:
     def __init__(self):
-        base = "assets/backgrounds"
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base = os.path.join(script_dir, "assets", "backgrounds")
         self.backgrounds = {
-            "plains": Background("plains", [f"{base}/sky.png", f"{base}/mountains.png", f"{base}/trees.png"], [0.2, 0.5, 1.0]),
-            "desert": Background("desert", [f"{base}/sky_desert.png", f"{base}/sun.png", f"{base}/dunes.png"], [0.0, 0.2, 0.8]),
-            "snow": Background("snow", [f"{base}/sky_snow.png", f"{base}/snow_mountains.png", f"{base}/fog.png"], [0.2, 0.6, 1.2])
+            "plains": Background("plains", [os.path.join(base, "sky.png"), os.path.join(base, "mountains.png"), os.path.join(base, "trees.png")], [0.2, 0.5, 1.0]),
+            "desert": Background("desert", [os.path.join(base, "sky_desert.png"), os.path.join(base, "sun.png"), os.path.join(base, "dunes.png")], [0.0, 0.2, 0.8]),
+            "snow": Background("snow", [os.path.join(base, "sky_snow.png"), os.path.join(base, "snow_mountains.png"), os.path.join(base, "fog.png")], [0.2, 0.6, 1.2])
         }
         
         for bg in self.backgrounds.values():

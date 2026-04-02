@@ -79,25 +79,33 @@ class BiomeManager:
         self.current_y = 650
 
     def _maintain_terrain(self):
+        import state # Dynamic import
         # Maintain heightmap up to camera_offset + 3000
         end_x = self.heightmap_start_x + len(self.heightmap) * self.chunk_step
         while end_x < self.camera_offset + 3000:
-            segment_length = random.randint(250, 500)
-            
-            rand_val = random.random()
-            if rand_val < 0.45:
-                slope = random.uniform(0.9, 1.3) # Downhill
-            elif rand_val < 0.8:
-                slope = random.uniform(-0.2, -0.45) # Uphill suavizado
+            if state.avalanche_ending:
+                segment_length = 500
+                slope = 0 # Ground is flat for the ending
+            elif state.avalanche_active:
+                segment_length = random.randint(400, 700)
+                slope = random.uniform(1.0, 1.4) # Steep descent
             else:
-                slope = random.uniform(-0.1, 0.1) # Flat
+                segment_length = random.randint(250, 500)
+                rand_val = random.random()
+                if rand_val < 0.45:
+                    slope = random.uniform(0.9, 1.3) # Downhill
+                elif rand_val < 0.8:
+                    slope = random.uniform(-0.2, -0.45) # Uphill suavizado
+                else:
+                    slope = random.uniform(-0.1, 0.1) # Flat
                 
             future_y = self.current_y + slope * segment_length
-            if future_y > 800:
-                slope = random.uniform(-0.2, -0.45)
-            elif future_y < 100:
-                slope = random.uniform(0.9, 1.3)
-                
+            if not state.avalanche_active:
+                if future_y > 800:
+                    slope = random.uniform(-0.2, -0.45)
+                elif future_y < 100:
+                    slope = random.uniform(0.9, 1.3)
+                    
             slope *= random.uniform(0.9, 1.1) # Variation
             
             pts = segment_length // self.chunk_step
@@ -124,6 +132,10 @@ class BiomeManager:
             self.heightmap_start_x += self.chunk_step
 
     def _maintain_gaps(self):
+        import state # Dynamic import
+        if state.avalanche_active:
+            return # No gaps in avalanche mode
+            
         # Gera buracos para os próximos pixels à frente
         while self.last_gap_gen_x < self.camera_offset + 2000:
             # Pula um espaço de terreno sólido
@@ -138,6 +150,10 @@ class BiomeManager:
         
         # Limpa gaps antigos
         self.gap_zones = [g for g in self.gap_zones if g[1] > self.camera_offset - 800]
+
+    def clear_gaps(self):
+        # Limpa todos os buracos atuais para terreno seguro
+        self.gap_zones = []
         
     def update(self, dt):
         self.time_elapsed += dt
@@ -225,7 +241,9 @@ class BiomeManager:
     def draw_background(self, surface):
         surface.fill(self.get_current().bg_color)
         
-    def draw_ground(self, surface, camera_y):
+    def draw_ground(self, surface, camera_y, camera_offset=None):
+        if camera_offset is None: camera_offset = self.camera_offset
+        
         name = self.get_current().name
         ground_color = (100, 200, 100)
         
@@ -239,14 +257,12 @@ class BiomeManager:
         screen_width = surface.get_width()
         screen_height = surface.get_height()
         
-        # Calculamos o deslocamento vertical para centralizar a visão no player
-        # camera_y é o foco. Queremos que camera_y fique em aprox. 60% da tela.
+        # O offset_y agora foca na altura da superfície fornecida (importante para virtual viewports)
         offset_y = (screen_height * 0.6) - camera_y
         
         current_points = []
-        # Amostragem mais larga (step 15) para remover ruído
         for x in range(0, screen_width + 30, 15):
-            world_x = x + self.camera_offset
+            world_x = x + camera_offset
             y = self.get_ground_height(world_x)
             
             if y is not None:

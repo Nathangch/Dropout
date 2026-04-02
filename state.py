@@ -12,6 +12,7 @@ fade_alpha = 0
 # Avalanche States
 avalanche_active = False
 avalanche_running = False
+avalanche_ending = False
 avalanche_timer = 0.0
 avalanche_world_x = 0.0
 avalanche_triggered_once = False

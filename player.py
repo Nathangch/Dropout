@@ -18,6 +18,7 @@ class Player:
         self.jump_count = 0
         self.max_jumps = 2
         self.is_grounded = False
+        self.was_grounded = False
         self.was_in_air = False
         self.just_landed = False
         self.impact_force = 0
@@ -137,6 +138,7 @@ class Player:
         self.rect.y += self.vy * dt
         
         # CHECAGEM DO CHÃO
+        self.was_grounded = self.is_grounded
         self.was_in_air = not self.is_grounded
         vy_before_landing = self.vy
         self.just_landed = False
@@ -170,34 +172,47 @@ class Player:
         else:
             self.is_grounded = False
             # O jogador só caiu no buraco se o pé dele estiver abaixo da linha teórica do cenário
-            if expected_ground_y is not None and self.rect.bottom >= expected_ground_y:
-                self.falling_into_hole = True
+            # Se ele cair demais (ex: 300px), a morte deve ser iminente
+            if expected_ground_y is not None:
+                if self.rect.top > expected_ground_y + 100:
+                    self.fall_timer += dt * 5 # Acelera a morte se já caiu muito
+                
+                if self.rect.bottom >= expected_ground_y:
+                    self.falling_into_hole = True
+                else:
+                    self.falling_into_hole = False
             else:
                 self.falling_into_hole = False
             
         if self.falling_into_hole:
             self.fall_timer += dt
+        else:
+            self.fall_timer = 0 # Segurança extra para evitar morte acumulada
             
-    def draw(self, surface, camera_y):
-        # Deslocamento vertical da câmera
+    def draw_at_world(self, surface, camera_y, camera_offset, world_x):
+        # Deslocamento vertical e horizontal para o sistema de viewport dinâmica
         offset_y = (surface.get_height() * 0.6) - camera_y
         
-        # Criar retângulo de exibição na tela
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
+        screen_x = world_x - camera_offset
+        screen_y = self.rect.y + offset_y
         
-        # Desenho rotacionado do player
+        # Cor baseada no estado
         color = (50, 255, 150) if self.is_gliding else ((255, 200, 50) if self.is_dashing else (50, 150, 255))
         
-        # Surface temporária com alpha
+        # Surface temporária
         player_surf = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
         pygame.draw.rect(player_surf, color, (0, 0, self.rect.width, self.rect.height), border_radius=5)
         pygame.draw.rect(player_surf, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), 2, border_radius=5)
         
-        # Rotacionar com base no slope
+        # Rotacionar
         rotated_player = pygame.transform.rotate(player_surf, -self.angle)
-        rot_rect = rotated_player.get_rect(center=screen_rect.center)
+        rot_rect = rotated_player.get_rect(center=(screen_x + self.rect.width//2, screen_y + self.rect.height//2))
         surface.blit(rotated_player, rot_rect)
+
+    def draw(self, surface, camera_y):
+        # Fallback para compatibilidade básica (posiciona o player a 12.5% da largura da tela)
+        world_x_guess = 100 
+        self.draw_at_world(surface, camera_y, 0, world_x_guess)
         
     def draw_ui(self, surface):
         # UI Estamina (Design mais premium)

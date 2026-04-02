@@ -20,6 +20,8 @@ class Camera:
         self.y = 300
         self.look_ahead = 0
         self.shake = 0
+        self.zoom = 1.0
+        self.target_zoom = 1.0
         
     def update(self, player_rect, current_speed, dt):
         # O player X é fixo na tela em ~100 mais variações de dash/momentum
@@ -36,6 +38,9 @@ class Camera:
         
         # Shake decay
         self.shake *= 0.9
+        
+        # Zoom Lerp
+        self.zoom += (self.target_zoom - self.zoom) * 2.0 * dt
 
 def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
     biome_manager.reset()
@@ -59,11 +64,36 @@ def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
     state.avalanche_triggered_once = False
 
 def draw_avalanche(screen, camera_offset, world_x):
+    # Posição X da avalanche na tela (world_x é a posição absoluta do topo da avalanche)
+    # A avalanche cresce para a ESQUERDA, mas world_x é a ponta DIREITA dela
     ava_screen_x = world_x - camera_offset
+    
+    width = screen.get_width()
     height = screen.get_height()
-    if ava_screen_x > -800:
-        # Fundo massivo da avalanche
-        pygame.draw.rect(screen, (240, 240, 250), (-1000, 0, ava_screen_x + 1000, height))
+    
+    # A avalanche só é visível se estiver na tela ou perto
+    if ava_screen_x > -width:
+        # Desenhar uma parede de neve branca gigante que cobre toda a esquerda
+        # O gradiente dá a ideia de densidade
+        for i in range(10):
+            # Camadas de neve com alfa diferente
+            alpha = 255 - (i * 20)
+            offset_x = i * 15
+            # A caixa da avalanche
+            ava_rect = pygame.Rect(-width, 0, ava_screen_x + width - offset_x, height)
+            
+            # Surface com alpha
+            s = pygame.Surface((ava_rect.width, ava_rect.height), pygame.SRCALPHA)
+            color = (250, 250, 255, alpha)
+            pygame.draw.rect(s, color, (0, 0, ava_rect.width, ava_rect.height))
+            
+            # Adicionar textura de partículas na parede de neve
+            for _ in range(5):
+                px = random.randint(0, ava_rect.width)
+                py = random.randint(0, ava_rect.height)
+                pygame.draw.circle(s, (255, 255, 255, alpha), (px, py), random.randint(2, 5))
+                
+            screen.blit(s, (ava_rect.x, ava_rect.y))
         # Bordas irregulares para dar textura
         for i in range(25):
             offset_y = (i * (height / 20))
@@ -103,15 +133,16 @@ def main():
     # Sound initialization placeholder
     try:
         pygame.mixer.init()
-        # Se o usuário tiver um arquivo de som "sing.wav", ele tocará
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        wind_path = os.path.join(script_dir, "assets", "wind.wav")
+        # Se o usuário tiver um arquivo de som "wind.wav", ele tocará
         # Caso contrário, ignoramos para não quebrar o jogo
         wind_sound = None
-        if os.path.exists("assets/wind.wav"):
-            wind_sound = pygame.mixer.Sound("assets/wind.wav")
+        if os.path.exists(wind_path):
+            wind_sound = pygame.mixer.Sound(wind_path)
             wind_sound.play(-1)
             wind_sound.set_volume(0)
     except:
-        sing_sound = None
         wind_sound = None
         
     current_wind_volume = 0.0
@@ -217,39 +248,61 @@ def main():
             
             current_biome = biome_manager.get_current()
             
-            # --- AVALANCHE SYSTEM ---
-            if biome_manager.current_idx == 2:
+            # --- AVALANCHE SYSTEM (Cinematic Event) ---
+            if biome_manager.current_idx == 2: # Snow Biome
                 if not state.avalanche_active and not state.avalanche_triggered_once:
-                    # Fica obrigatório e dispara 3 segundos após o jogador entrar no bioma
-                    if biome_manager.time_elapsed > 3.0:
+                    # Tira a dúvida: Dispara exatamente aos 15 segundos
+                    if biome_manager.time_elapsed >= 15.0:
                         state.avalanche_active = True
                         state.avalanche_timer = 0
                         state.avalanche_running = False
                         state.avalanche_triggered_once = True
+                        state.avalanche_ending = False
+                        # GARANTIR TERRENO LIMPO E SEGURO
+                        monster_manager.clear()
+                        biome_manager.clear_gaps()
+                        # ZOOM-OUT suave no início
+                        camera.target_zoom = 0.85
+                
                 elif state.avalanche_active:
                     state.avalanche_timer += dt
                     
+                    # 1. BOOST DE MOMENTUM (Garantir sensação de velocidade)
+                    player.momentum += 15 * dt
+                    
                     if state.avalanche_timer < 2.0:
-                        camera.shake = max(camera.shake, 3.0)
+                        # Warning period
+                        camera.shake = max(camera.shake, 4.0)
                         particle_manager.spawn_avalanche_warning()
                     else:
                         if not state.avalanche_running:
                             state.avalanche_running = True
-                            # Spawna na borda esquerda da tela, ligeiramente fora para ser contínuo
-                            state.avalanche_world_x = biome_manager.camera_offset - 10
+                            state.avalanche_world_x = biome_manager.camera_offset - 400
                         
-                        # A avalanche tem a velocidade do bioma + um pequeno bônus
-                        # Isso significa que o jogador precisa usar momentum (pulos/dash/descidas) para escapar!
-                        # 30px a mais que a base, o que dá tempo razoável de escape se vacilar
-                        avalanche_speed = biome_manager.current_speed + 30
+                        # 2. MOVIMENTO DA AVALANCHE (Baseado na velocidade do player)
+                        # avalanche_speed = player.speed * 0.95
+                        avalanche_speed = total_speed * 0.94
                         state.avalanche_world_x += avalanche_speed * dt
                         
-                        # Se o jogador estiver muito rápido, garante que a avalanche fique visível no limite da tela
-                        if state.avalanche_world_x < biome_manager.camera_offset - 10:
-                            state.avalanche_world_x = biome_manager.camera_offset - 10
-                        
-                        if (player.rect.centerx + biome_manager.camera_offset) < state.avalanche_world_x + 30:
+                        # Morte ao ser pego pela parede branca
+                        player_world_x = player.rect.centerx + biome_manager.camera_offset
+                        if player_world_x < state.avalanche_world_x + 50:
                             state.current_state = state.GameState.GAME_OVER
+                    
+                    # 3. FINALIZAR EVENTO (Começa a reta aos 10s de fuga)
+                    if state.avalanche_timer > 10.0 and not state.avalanche_ending:
+                        state.avalanche_ending = True
+                        # Spawn do baú garantido na reta à frente
+                        spawn_x = biome_manager.camera_offset + 1000
+                        ground_y = biome_manager.get_ground_height(spawn_x, ignore_holes=True)
+                        monster_manager.spawn_final_chest(spawn_x, ground_y)
+                    
+                    # FIM REAL (13s): Para a avalanche e volta zoom
+                    if state.avalanche_timer > 13.0:
+                        state.avalanche_active = False
+                        state.avalanche_running = False
+                        state.avalanche_ending = False
+                        camera.target_zoom = 1.0
             else:
                 state.avalanche_active = False
                 state.avalanche_running = False
@@ -286,7 +339,7 @@ def main():
                 particle_manager.spawn_particle(current_biome.name)
             
             # 1. VERIFICAR MORTE (COLISÃO OU QUEDA NO BURACO)
-            if collision_result == True or player.fall_timer > 0.5:
+            if collision_result == True or player.fall_timer > 0.2:
                 state.current_state = state.GameState.GAME_OVER
                 
             # 3. VERIFICAR SPAWN DO BAÚ FINAL (No final do 3º Bioma)
@@ -304,63 +357,92 @@ def main():
                     monster_manager.spawn_final_chest(spawn_x, ground_y)
 
         # 3. RENDERING
+        # 1. CÁLCULO DO VIEWPORT VIRTUAL (Para suportar o ZOOM real)
+        v_width = int(WIDTH / camera.zoom)
+        v_height = int(HEIGHT / camera.zoom)
+        game_surface = pygame.Surface((v_width, v_height))
+        
+        # Sincronizar o ParticleManager com as dimensões virtuais (Para neve/poeira cobrir tudo)
+        particle_manager.width = v_width
+        particle_manager.height = v_height
+        
+        # 2. CALCULAR OFFSETS DE DESENHO (Para manter o player focado)
+        # Queremos que o player.x=100 na tela final original (800x600)
+        # screen_x = (world_x - draw_offset_x) * zoom => 100.
+        # draw_offset_x = (player_world_x) - (100 / zoom)
+        player_world_x = player.rect.centerx + biome_manager.camera_offset
+        draw_camera_offset = player_world_x - (100 / camera.zoom)
+        
+        # Para o Y: queremos manter o foco do player na posição relativa 60%
+        # draw_camera_y = camera.y (foco central)
+        # O offset_y nas funções de draw já cuida de centralizar no 0.6 * surface_height
+        # Mas como a v_height mudou, as funções usarão v_height automaticamente.
+        draw_camera_y = camera.y 
+        
         if state.current_state == state.GameState.MENU:
-            menu_ui.draw(screen)
+            menu_ui.draw(game_surface)
             
         elif state.current_state == state.GameState.STORY:
-            story_ui.draw(screen)
+            story_ui.draw(game_surface)
             
         elif state.current_state == state.GameState.PLAYING:
             shake_y = random.uniform(-camera.shake, camera.shake) if camera.shake > 0.1 else 0
-            draw_camera_y = camera.y + shake_y
+            # Aplicamos o shake no foco
+            draw_camera_y_with_shake = draw_camera_y + shake_y
             
-            bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, draw_camera_y)
-            particle_manager.draw_trail(screen, biome_manager.camera_offset, draw_camera_y)
-            particle_manager.draw(screen)
-            monster_manager.draw(screen, draw_camera_y)
-            player.draw(screen, draw_camera_y)
+            bg_manager.draw(game_surface)
+            biome_manager.draw_ground(game_surface, draw_camera_y_with_shake, draw_camera_offset)
+            particle_manager.draw_trail(game_surface, draw_camera_offset, draw_camera_y_with_shake)
+            particle_manager.draw(game_surface)
+            monster_manager.draw(game_surface, draw_camera_y_with_shake, draw_camera_offset)
+            player.draw_at_world(game_surface, draw_camera_y_with_shake, draw_camera_offset, player_world_x)
             
             if getattr(state, 'avalanche_running', False):
-                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+                draw_avalanche(game_surface, draw_camera_offset, state.avalanche_world_x)
             
-            draw_speed_lines(screen, total_speed)
+            draw_speed_lines(game_surface, total_speed)
             
-            player.draw_ui(screen)
+            player.draw_ui(game_surface)
             
             font = pygame.font.Font(None, 36)
             score_text = font.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
-            screen.blit(score_text, (10, 10))
+            game_surface.blit(score_text, (10, 10))
             
         elif state.current_state == state.GameState.GAME_OVER:
-            bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
-            particle_manager.draw(screen)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            bg_manager.draw(game_surface)
+            biome_manager.draw_ground(game_surface, draw_camera_y, draw_camera_offset)
+            particle_manager.draw(game_surface)
+            monster_manager.draw(game_surface, draw_camera_y, draw_camera_offset)
+            player.draw_at_world(game_surface, draw_camera_y, draw_camera_offset, player_world_x)
             
             if getattr(state, 'avalanche_running', False):
-                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+                draw_avalanche(game_surface, draw_camera_offset, state.avalanche_world_x)
             
-            game_over_ui.draw(screen)
+            game_over_ui.draw(game_surface)
 
         elif state.current_state == state.GameState.ENDING:
             # Renderiza o mundo estático ao fundo
-            bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            bg_manager.draw(game_surface)
+            # Na reta final a camera fica no player
+            biome_manager.draw_ground(game_surface, draw_camera_y, draw_camera_offset)
+            monster_manager.draw(game_surface, draw_camera_y, draw_camera_offset)
+            player.draw_at_world(game_surface, draw_camera_y, draw_camera_offset, player_world_x)
             
             if getattr(state, 'avalanche_running', False):
-                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+                draw_avalanche(game_surface, draw_camera_offset, state.avalanche_world_x)
             
-            player.draw_ui(screen)
+            player.draw_ui(game_surface)
             
             # Fade and Text
             if state.fade_alpha < 255:
                 state.fade_alpha = min(255, state.fade_alpha + 150 * dt)
                 
-            ending_ui.draw(screen)
+            ending_ui.draw(game_surface)
+            
+        # APLICAÇÃO DO ZOOM FINAL (Scale Down)
+        # Sempre redimensionamos para 800x600 para preencher a tela original
+        final_surface = pygame.transform.smoothscale(game_surface, (WIDTH, HEIGHT))
+        screen.blit(final_surface, (0, 0))
             
         pygame.display.flip()
 
