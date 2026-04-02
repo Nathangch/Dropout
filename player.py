@@ -131,9 +131,9 @@ class Player:
                 self.rect.x = max(target_x, self.rect.x - pullback_speed * dt)
             elif self.rect.x < target_x:
                 self.rect.x = min(target_x, self.rect.x + 200 * dt)
-                
-            self.vy += current_gravity * dt
-
+               # 3. MOVEMENT VERTCAL
+        if not self.is_grounded:
+            self.vy += 1500 * dt
         self.rect.y += self.vy * dt
         
         # CHECAGEM DO CHÃO
@@ -156,6 +156,15 @@ class Player:
                     self.impact_force = abs(vy_before_landing)
                 self.is_grounded = True
                 self.jump_count = 0 # Reseta os pulos ao tocar o chão
+            elif self.was_grounded and self.vy >= 0:
+                diff = current_ground_y - self.rect.bottom
+                if 0 < diff < 150: # Evitar voar para fora da pista
+                    # Interpolação suave para snap no chão
+                    self.rect.bottom += max(1, int(diff * 0.4))
+                    self.vy = 0
+                    self.is_grounded = True
+                else:
+                    self.is_grounded = False
             else:
                 self.is_grounded = False
         else:

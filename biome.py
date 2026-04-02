@@ -82,11 +82,11 @@ class BiomeManager:
         # Maintain heightmap up to camera_offset + 3000
         end_x = self.heightmap_start_x + len(self.heightmap) * self.chunk_step
         while end_x < self.camera_offset + 3000:
-            segment_length = random.randint(300, 700)
+            segment_length = random.randint(250, 500)
             
             rand_val = random.random()
             if rand_val < 0.45:
-                slope = random.uniform(0.7, 1.2) # Downhill
+                slope = random.uniform(0.9, 1.3) # Downhill
             elif rand_val < 0.8:
                 slope = random.uniform(-0.2, -0.45) # Uphill suavizado
             else:
@@ -96,7 +96,7 @@ class BiomeManager:
             if future_y > 800:
                 slope = random.uniform(-0.2, -0.45)
             elif future_y < 100:
-                slope = random.uniform(0.7, 1.2)
+                slope = random.uniform(0.9, 1.3)
                 
             slope *= random.uniform(0.9, 1.1) # Variation
             
