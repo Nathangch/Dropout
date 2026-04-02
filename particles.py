@@ -92,6 +92,18 @@ class ParticleManager:
             lifetime = random.randint(20, 40)
             self.particles.append(Particle(x, y, vx, vy, size, lifetime, (200, 200, 200), gravity=0.2))
 
+    def spawn_avalanche_warning(self):
+        for _ in range(3):
+            x = random.randint(0, self.width)
+            y = -10
+            # Neve pesada vindo rápido da diagonal
+            vx = random.uniform(2, 6)
+            vy = random.uniform(5, 10)
+            size = random.randint(3, 7)
+            lifetime = random.randint(150, 300)
+            color = (230, 230, 255)
+            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color, gravity=0.3))
+
     def update_trail(self, is_grounded, world_x, ground_y, current_biome_name):
         if is_grounded and current_biome_name == "snow":
             self.trail.append((world_x, ground_y))

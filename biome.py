@@ -40,6 +40,12 @@ class BiomeManager:
         self.frequency = 0.005
         self.phase = 0
         
+        # SEGMENTED TERRAIN STATE
+        self.chunk_step = 10
+        self.heightmap = []
+        self.heightmap_start_x = 0
+        self.current_y = self.base_height + 250
+        
         # GAPS LOGIC
         self.gap_zones = [] # [(start_x, end_x), ...]
         self.last_gap_gen_x = 0
@@ -59,8 +65,64 @@ class BiomeManager:
         self.gap_zones = []
         self.last_gap_gen_x = 500 # Safe zone
         self.start_phase = True
+        
+        self._init_terrain()
+        
         self._maintain_gaps()
         
+    def _init_terrain(self):
+        self.heightmap = []
+        self.heightmap_start_x = 0
+        limit_pts = int(self.start_distance_limit / self.chunk_step)
+        for i in range(limit_pts):
+            self.heightmap.append(400 + (i * self.chunk_step / self.start_distance_limit) * 250)
+        self.current_y = 650
+
+    def _maintain_terrain(self):
+        # Maintain heightmap up to camera_offset + 3000
+        end_x = self.heightmap_start_x + len(self.heightmap) * self.chunk_step
+        while end_x < self.camera_offset + 3000:
+            segment_length = random.randint(300, 700)
+            
+            rand_val = random.random()
+            if rand_val < 0.45:
+                slope = random.uniform(0.7, 1.2) # Downhill
+            elif rand_val < 0.8:
+                slope = random.uniform(-0.2, -0.45) # Uphill suavizado
+            else:
+                slope = random.uniform(-0.1, 0.1) # Flat
+                
+            future_y = self.current_y + slope * segment_length
+            if future_y > 800:
+                slope = random.uniform(-0.2, -0.45)
+            elif future_y < 100:
+                slope = random.uniform(0.7, 1.2)
+                
+            slope *= random.uniform(0.9, 1.1) # Variation
+            
+            pts = segment_length // self.chunk_step
+            chunk = []
+            for i in range(pts):
+                chunk.append(self.current_y + slope * (i * self.chunk_step))
+                
+            self.current_y += slope * pts * self.chunk_step
+            self.heightmap.extend(chunk)
+            end_x += pts * self.chunk_step
+            
+        # Smooth the last added items except boundaries using Moving Average
+        if len(self.heightmap) > 10:
+            last = len(self.heightmap)
+            # smooth last 150 elements approx
+            start_smooth = max(2, last - 150)
+            temp = list(self.heightmap)
+            for i in range(start_smooth, last - 2):
+                self.heightmap[i] = (temp[i-2] + temp[i-1] + temp[i] + temp[i+1] + temp[i+2]) / 5.0
+                
+        # Trim old heightmap points
+        while len(self.heightmap) > 2 and (self.heightmap_start_x + self.chunk_step) < self.camera_offset - 1000:
+            self.heightmap.pop(0)
+            self.heightmap_start_x += self.chunk_step
+
     def _maintain_gaps(self):
         # Gera buracos para os próximos pixels à frente
         while self.last_gap_gen_x < self.camera_offset + 2000:
@@ -127,38 +189,38 @@ class BiomeManager:
         if self.camera_offset > self.start_distance_limit:
             self.start_phase = False
         self._maintain_gaps()
+        self._maintain_terrain()
                 
     def get_current(self):
         return self.biomes[self.current_idx]
         
-    def get_ground_height(self, world_x):
+    def get_ground_height(self, world_x, ignore_holes=False):
         # 1. VERIFICAR BURACOS
-        for g_start, g_end in self.gap_zones:
-            if g_start <= world_x <= g_end:
-                return None
+        if not ignore_holes:
+            for g_start, g_end in self.gap_zones:
+                if g_start <= world_x <= g_end:
+                    return None
         
-        # y = A * sin(f * x + phase) + offset
-        y = self.amplitude * math.sin(self.frequency * world_x + self.phase) + self.base_height
-        
-        # Start Phase: rampa linear suave descendente
-        # Mantemos a continuidade: após o limite, o offset de 250px permanece constante
-        if world_x < self.start_distance_limit:
-            y += (world_x / self.start_distance_limit) * 250
-        else:
-            y += 250
+        idx = int((world_x - self.heightmap_start_x) / self.chunk_step)
+        if idx < 0: idx = 0
+        if idx >= len(self.heightmap) - 1:
+            if self.heightmap: return round(self.heightmap[-1], 0)
+            return 650
             
-        # Filtro de Arredondamento (Remove micro-oscilação invisível)
-        return round(y, 0)
+        # Lerp
+        y1 = self.heightmap[idx]
+        y2 = self.heightmap[idx+1]
+        rem = (world_x - self.heightmap_start_x) % self.chunk_step
+        t = rem / self.chunk_step
+        return round(y1 + (y2 - y1) * t, 0)
         
     def get_ground_slope(self, world_x):
-        # Derivada da função seno: y' = A * f * cos(f * x + phase)
-        slope = self.amplitude * self.frequency * math.cos(self.frequency * world_x + self.phase)
-        
-        # Ajuste da rampa inicial na inclinação (apenas enquanto world_x < limit)
-        if world_x < self.start_distance_limit:
-            slope += 250 / self.start_distance_limit
-            
-        return slope
+        idx = int((world_x - self.heightmap_start_x) / self.chunk_step)
+        if idx < 0: return 0
+        if idx >= len(self.heightmap) - 1: return 0
+        y1 = self.heightmap[idx]
+        y2 = self.heightmap[idx+1]
+        return (y2 - y1) / self.chunk_step
         
     def draw_background(self, surface):
         surface.fill(self.get_current().bg_color)

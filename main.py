@@ -51,6 +51,41 @@ def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
     # Reset da suavização de velocidade para o novo jogo
     if hasattr(state, 'smooth_speed'):
         state.smooth_speed = biome_manager.current_speed + player.momentum
+    
+    state.avalanche_active = False
+    state.avalanche_running = False
+    state.avalanche_timer = 0.0
+    state.avalanche_world_x = 0.0
+    state.avalanche_triggered_once = False
+
+def draw_avalanche(screen, camera_offset, world_x):
+    ava_screen_x = world_x - camera_offset
+    height = screen.get_height()
+    if ava_screen_x > -800:
+        # Fundo massivo da avalanche
+        pygame.draw.rect(screen, (240, 240, 250), (-1000, 0, ava_screen_x + 1000, height))
+        # Bordas irregulares para dar textura
+        for i in range(25):
+            offset_y = (i * (height / 20))
+            pygame.draw.circle(screen, (240, 240, 250), (int(ava_screen_x), int(offset_y)), 40)
+
+def draw_speed_lines(screen, total_speed):
+    if total_speed < 550:
+        return
+        
+    width = screen.get_width()
+    height = screen.get_height()
+    
+    intensity = min((total_speed - 550) / 450.0, 1.0)
+    num_lines = int(30 * intensity)
+    
+    for _ in range(num_lines):
+        x = random.randint(int(width * 0.2), width + 200)
+        y = random.randint(0, height)
+        length = random.randint(50, 300)
+        thickness = random.randint(1, 3)
+        # Linhas brancas velozes com base no trailing horizontal
+        pygame.draw.line(screen, (255, 255, 255), (x, y), (x - length, y), thickness)
 
 def main():
     pygame.init()
@@ -182,6 +217,44 @@ def main():
             
             current_biome = biome_manager.get_current()
             
+            # --- AVALANCHE SYSTEM ---
+            if biome_manager.current_idx == 2:
+                if not state.avalanche_active and not state.avalanche_triggered_once:
+                    # Fica obrigatório e dispara 3 segundos após o jogador entrar no bioma
+                    if biome_manager.time_elapsed > 3.0:
+                        state.avalanche_active = True
+                        state.avalanche_timer = 0
+                        state.avalanche_running = False
+                        state.avalanche_triggered_once = True
+                elif state.avalanche_active:
+                    state.avalanche_timer += dt
+                    
+                    if state.avalanche_timer < 2.0:
+                        camera.shake = max(camera.shake, 3.0)
+                        particle_manager.spawn_avalanche_warning()
+                    else:
+                        if not state.avalanche_running:
+                            state.avalanche_running = True
+                            # Spawna na borda esquerda da tela, ligeiramente fora para ser contínuo
+                            state.avalanche_world_x = biome_manager.camera_offset - 10
+                        
+                        # A avalanche tem a velocidade do bioma + um pequeno bônus
+                        # Isso significa que o jogador precisa usar momentum (pulos/dash/descidas) para escapar!
+                        # 30px a mais que a base, o que dá tempo razoável de escape se vacilar
+                        avalanche_speed = biome_manager.current_speed + 30
+                        state.avalanche_world_x += avalanche_speed * dt
+                        
+                        # Se o jogador estiver muito rápido, garante que a avalanche fique visível no limite da tela
+                        if state.avalanche_world_x < biome_manager.camera_offset - 10:
+                            state.avalanche_world_x = biome_manager.camera_offset - 10
+                        
+                        if (player.rect.centerx + biome_manager.camera_offset) < state.avalanche_world_x + 30:
+                            state.current_state = state.GameState.GAME_OVER
+            else:
+                state.avalanche_active = False
+                state.avalanche_running = False
+            # ------------------------
+            
             # Aplicar momentum no movimento da camera
             # Usamos a velocidade suavizada para evitar o tranco visual
             momentum_contribution = (total_speed - biome_manager.current_speed)
@@ -207,6 +280,10 @@ def main():
             camera.update(player.rect, total_speed, dt)
             monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.start_phase)
             particle_manager.update(dt, current_biome.name)
+            
+            # Turbilhão de Partículas Excesso de Velocidade
+            if total_speed > 600 and random.random() < 0.5:
+                particle_manager.spawn_particle(current_biome.name)
             
             # 1. VERIFICAR MORTE (COLISÃO OU QUEDA NO BURACO)
             if collision_result == True or player.fall_timer > 0.5:
@@ -244,6 +321,13 @@ def main():
             monster_manager.draw(screen, draw_camera_y)
             player.draw(screen, draw_camera_y)
             
+            if getattr(state, 'avalanche_running', False):
+                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+            
+            draw_speed_lines(screen, total_speed)
+            
+            player.draw_ui(screen)
+            
             font = pygame.font.Font(None, 36)
             score_text = font.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
             screen.blit(score_text, (10, 10))
@@ -255,6 +339,9 @@ def main():
             monster_manager.draw(screen, camera.y)
             player.draw(screen, camera.y)
             
+            if getattr(state, 'avalanche_running', False):
+                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+            
             game_over_ui.draw(screen)
 
         elif state.current_state == state.GameState.ENDING:
@@ -263,6 +350,11 @@ def main():
             biome_manager.draw_ground(screen, camera.y)
             monster_manager.draw(screen, camera.y)
             player.draw(screen, camera.y)
+            
+            if getattr(state, 'avalanche_running', False):
+                draw_avalanche(screen, biome_manager.camera_offset, state.avalanche_world_x)
+            
+            player.draw_ui(screen)
             
             # Fade and Text
             if state.fade_alpha < 255:

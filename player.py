@@ -11,7 +11,7 @@ class Player:
         
         # MOMENTUM (IMPULSO)
         self.momentum = 0
-        self.max_momentum = 250
+        self.max_momentum = 500
         self.angle = 0
         
         # PULO DUPLO
@@ -97,12 +97,13 @@ class Player:
         slope = get_ground_slope(world_x)
         
         if self.is_grounded:
-            if slope > 0.1: # Descida
-                self.momentum += 200 * dt
-            elif slope < -0.1: # Subida
-                self.momentum -= 250 * dt
+            if slope > 0.05: # Descida
+                self.momentum += (slope * 600) * dt
+            elif slope < -0.05: # Subida
+                # slope é negativo na subida, então somar diminui o momentum
+                self.momentum += (slope * 500) * dt
             else: # Plano
-                self.momentum *= (1 - 0.4 * dt)
+                self.momentum -= 60 * dt
                 
             # Alinhamento Visual
             target_angle = math.degrees(math.atan2(slope, 1))
@@ -141,6 +142,8 @@ class Player:
         self.just_landed = False
         
         current_ground_y = get_ground_height(world_x)
+        expected_ground_y = get_ground_height(world_x, ignore_holes=True)
+        
         if current_ground_y is not None:
             self.falling_into_hole = False
             self.fall_timer = 0
@@ -157,7 +160,11 @@ class Player:
                 self.is_grounded = False
         else:
             self.is_grounded = False
-            self.falling_into_hole = True
+            # O jogador só caiu no buraco se o pé dele estiver abaixo da linha teórica do cenário
+            if expected_ground_y is not None and self.rect.bottom >= expected_ground_y:
+                self.falling_into_hole = True
+            else:
+                self.falling_into_hole = False
             
         if self.falling_into_hole:
             self.fall_timer += dt
@@ -183,6 +190,7 @@ class Player:
         rot_rect = rotated_player.get_rect(center=screen_rect.center)
         surface.blit(rotated_player, rot_rect)
         
+    def draw_ui(self, surface):
         # UI Estamina (Design mais premium)
         ui_x, ui_y = 20, 50
         pygame.draw.rect(surface, (30, 30, 30), (ui_x, ui_y, 104, 14)) # Borda
