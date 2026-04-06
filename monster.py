@@ -78,11 +78,17 @@ class Monster:
         self.animate()
         self.move(dt, camera_offset, get_ground_height)
                 
-    def draw(self, surface, camera_y):
-        offset_y = (surface.get_height() * 0.6) - camera_y
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
-        surface.blit(self.image, screen_rect)
+    def draw(self, surface, camera):
+        zoom = camera.zoom
+        offset_y = (surface.get_height() * 0.6) - camera.y * zoom
+        
+        # Scale world relative to focal 100
+        screen_x = (self.rect.x - 100) * zoom + 100
+        screen_y = self.rect.y * zoom + offset_y
+        
+        if self.image:
+            scaled_img = pygame.transform.scale(self.image, (int(self.rect.width * zoom), int(self.rect.height * zoom)))
+            surface.blit(scaled_img, (int(screen_x), int(screen_y)))
 
 class MonsterManager:
     def __init__(self):
@@ -136,11 +142,11 @@ class MonsterManager:
                 return True
         return False
         
-    def draw(self, surface, camera_y):
+    def draw(self, surface, camera):
         for m in self.monsters:
-            m.draw(surface, camera_y)
+            m.draw(surface, camera)
         if self.final_chest:
-            self.final_chest.draw(surface, camera_y)
+            self.final_chest.draw(surface, camera)
 
 class Chest:
     def __init__(self, world_x, ground_y):
@@ -157,40 +163,47 @@ class Chest:
         self.rect.centerx = self.world_x - camera_offset
         self.glow_timer += 0.05
         
-    def draw(self, surface, camera_y):
-        offset_y = (surface.get_height() * 0.6) - camera_y
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
+    def draw(self, surface, camera):
+        zoom = camera.zoom
+        offset_y = (surface.get_height() * 0.6) - camera.y * zoom
         
-        # 1. Pulsing Glow
-        pulse = math.sin(self.glow_timer) * 10
-        glow_size = 120 + pulse
+        # Scale world relative to focal 100
+        screen_x = (self.rect.x - 100) * zoom + 100
+        screen_y = self.rect.y * zoom + offset_y
+        scaled_w = int(self.rect.width * zoom)
+        scaled_h = int(self.rect.height * zoom)
+        
+        # 1. Pulsing Glow (Scaled)
+        pulse = math.sin(self.glow_timer) * 10 * zoom
+        glow_size = (120 * zoom) + pulse
         glow_surf = pygame.Surface((int(glow_size), int(glow_size)), pygame.SRCALPHA)
         color = (255, 255, 100, 80) if not self.opened else (100, 255, 100, 50)
         pygame.draw.circle(glow_surf, color, (int(glow_size//2), int(glow_size//2)), int(glow_size//2.5))
-        surface.blit(glow_surf, (screen_rect.centerx - glow_size//2, screen_rect.centery - glow_size//2), special_flags=pygame.BLEND_ALPHA_SDL2)
+        surface.blit(glow_surf, (int(screen_x + scaled_w/2 - glow_size//2), int(screen_y + scaled_h/2 - glow_size//2)), special_flags=pygame.BLEND_ALPHA_SDL2)
         
-        # 2. Chest Body
+        # 2. Chest Body (Scaled)
         body_color = (139, 69, 19) # Golden wood
         if self.opened: body_color = (80, 40, 10)
         
-        pygame.draw.rect(surface, body_color, screen_rect, border_radius=3)
-        pygame.draw.rect(surface, (0, 0, 0), screen_rect, 2, border_radius=3)
+        rect_scaled = pygame.Rect(int(screen_x), int(screen_y), scaled_w, scaled_h)
+        pygame.draw.rect(surface, body_color, rect_scaled, border_radius=max(1, int(3 * zoom)))
+        pygame.draw.rect(surface, (0, 0, 0), rect_scaled, max(1, int(2 * zoom)), border_radius=max(1, int(3 * zoom)))
         
-        # Detail: Lid
-        lid_rect = pygame.Rect(screen_rect.x, screen_rect.y, screen_rect.width, 15)
+        # Detail: Lid (Scaled)
+        lid_h = int(15 * zoom)
+        lid_rect = pygame.Rect(int(screen_x), int(screen_y), scaled_w, lid_h)
         if self.opened:
-            lid_rect.y -= 10
-            # Draw treasures inside
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx - 10, screen_rect.y + 10), 5)
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx + 10, screen_rect.y + 10), 4)
-            pygame.draw.circle(surface, (255, 215, 0), (screen_rect.centerx, screen_rect.y + 5), 6)
+            lid_rect.y -= int(10 * zoom)
+            # Draw treasures inside (Scaled)
+            pygame.draw.circle(surface, (255, 215, 0), (int(screen_x + scaled_w/2 - 10*zoom), int(screen_y + 10*zoom)), int(5*zoom))
+            pygame.draw.circle(surface, (255, 215, 0), (int(screen_x + scaled_w/2 + 10*zoom), int(screen_y + 10*zoom)), int(4*zoom))
+            pygame.draw.circle(surface, (255, 215, 0), (int(screen_x + scaled_w/2), int(screen_y + 5*zoom)), int(6*zoom))
             
-        pygame.draw.rect(surface, (101, 67, 33), lid_rect, border_radius=3)
-        pygame.draw.rect(surface, (0, 0, 0), lid_rect, 2, border_radius=3)
+        pygame.draw.rect(surface, (101, 67, 33), lid_rect, border_radius=max(1, int(3 * zoom)))
+        pygame.draw.rect(surface, (0, 0, 0), lid_rect, max(1, int(2 * zoom)), border_radius=max(1, int(3 * zoom)))
         
-        # Lock
-        lock_rect = pygame.Rect(screen_rect.centerx - 5, lid_rect.bottom - 5, 10, 10)
-        pygame.draw.rect(surface, (255, 215, 0), lock_rect)
-        pygame.draw.rect(surface, (0, 0, 0), lock_rect, 1)
-
+        # Lock (Scaled)
+        lock_size = int(10 * zoom)
+        lock_rect = pygame.Rect(int(screen_x + scaled_w/2 - lock_size/2), lid_rect.bottom - int(5*zoom), lock_size, lock_size)
+        pygame.draw.rect(surface, (212, 175, 55), lock_rect, border_radius=max(1, int(2 * zoom)))
+        pygame.draw.rect(surface, (0, 0, 0), lock_rect, max(1, int(1 * zoom)), border_radius=max(1, int(2 * zoom)))

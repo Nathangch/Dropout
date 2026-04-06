@@ -144,25 +144,28 @@ class Player:
         else:
             self.is_grounded = False
             
-    def draw(self, surface, camera_y):
-        # Deslocamento vertical da câmera
-        offset_y = (surface.get_height() * 0.6) - camera_y
+    def draw(self, surface, camera):
+        zoom = camera.zoom
+        # Deslocamento vertical ajustado pelo zoom
+        offset_y = (surface.get_height() * 0.6) - camera.y * zoom
         
-        # Criar retângulo de exibição na tela
-        screen_rect = self.rect.copy()
-        screen_rect.y += offset_y
+        # O player X é fixo perto de 100, mas o zoom afeta a escala de tudo
+        # Vamos manter o foco no player em ~100
+        screen_x = (self.rect.x - 100) * zoom + 100
+        screen_y = self.rect.y * zoom + offset_y
         
-        # Desenho rotacionado do player
+        # Dimensões escaladas
+        w, h = int(self.rect.width * zoom), int(self.rect.height * zoom)
+        
+        # Surface temporária com alpha e escala
+        player_surf = pygame.Surface((w, h), pygame.SRCALPHA)
         color = (50, 255, 150) if self.is_gliding else ((255, 200, 50) if self.is_dashing else (50, 150, 255))
+        pygame.draw.rect(player_surf, color, (0, 0, w, h), border_radius=max(1, int(5 * zoom)))
+        pygame.draw.rect(player_surf, (0, 0, 0), (0, 0, w, h), max(1, int(2 * zoom)), border_radius=max(1, int(5 * zoom)))
         
-        # Surface temporária com alpha
-        player_surf = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(player_surf, color, (0, 0, self.rect.width, self.rect.height), border_radius=5)
-        pygame.draw.rect(player_surf, (0, 0, 0), (0, 0, self.rect.width, self.rect.height), 2, border_radius=5)
-        
-        # Rotacionar com base no slope
+        # Rotacionar
         rotated_player = pygame.transform.rotate(player_surf, -self.angle)
-        rot_rect = rotated_player.get_rect(center=screen_rect.center)
+        rot_rect = rotated_player.get_rect(center=(int(screen_x + w/2), int(screen_y + h/2)))
         surface.blit(rotated_player, rot_rect)
         
         # UI Estamina (Design mais premium)

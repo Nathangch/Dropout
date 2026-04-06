@@ -8,6 +8,7 @@ from player import Player
 from monster import MonsterManager
 from background import BackgroundManager
 from particles import ParticleManager
+import random
 
 WIDTH = 800
 HEIGHT = 600
@@ -19,15 +20,27 @@ class Camera:
         self.y = 300
         self.target_y = 300
         self.look_ahead = 0
+        self.zoom = 1.0
+        self.target_zoom = 1.0
         
-    def update(self, player_rect, current_speed, dt):
+    def update(self, player_rect, current_speed, dt, is_on_hole=False):
         # O player X é fixo na tela em ~100 mais variações de dash/momentum
-        # Mas aqui queremos seguir a posição Y principalmente
-        self.target_y = player_rect.centery
+        # Mas aqui queremos seguir a posição Y principalmente para manter o enquadramento
+        
+        if not is_on_hole:
+            self.target_y = player_rect.centery
+        else:
+            # Se cair no buraco, a câmera para de descer mas pode seguir para cima
+            # (Caso o player pule para sair de um buraco antes de morrer)
+            if player_rect.centery < self.target_y:
+                self.target_y = player_rect.centery
         
         # LERP Suave (Follow delay)
         # Segue o player no Y para manter o enquadramento centralizado
         self.y += (self.target_y - self.y) * 4.5 * dt
+        
+        # Zoom Suave
+        self.zoom += (self.target_zoom - self.zoom) * 1.5 * dt
         
         # Look ahead horizontal baseado na velocidade
         target_look_ahead = current_speed * 0.12
@@ -43,6 +56,7 @@ def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
     if initial_y is None: initial_y = 400 # Fallback de proteção
     player.__init__(100, initial_y)
     camera.y = initial_y
+    camera.target_y = initial_y
     state.fade_alpha = 0
     # Reset da suavização de velocidade para o novo jogo
     if hasattr(state, 'smooth_speed'):
@@ -117,9 +131,6 @@ def main():
                     if state.current_state == state.GameState.PLAYING:
                         reset_game(player, monster_manager, biome_manager, bg_manager, camera)
                         
-                    if state.current_state == state.GameState.PLAYING:
-                        reset_game(player, monster_manager, biome_manager, bg_manager, camera)
-                        
         elif state.current_state == state.GameState.GAME_OVER:
             if click_pos:
                 new_state = game_over_ui.handle_click(click_pos)
@@ -137,6 +148,16 @@ def main():
                         reset_game(player, monster_manager, biome_manager, bg_manager, camera)
 
         elif state.current_state == state.GameState.PLAYING:
+            # 0. CONTROLAR ZOOM E ESTADOS ESPECIAIS (Avalanche)
+            if biome_manager.is_avalanche:
+                camera.target_zoom = 0.65
+                # Screen shake sutil na avalanche
+                camera.y += random.uniform(-2, 2)
+            elif biome_manager.is_final_stretch:
+                camera.target_zoom = 1.0 # Volta ao normal
+            else:
+                camera.target_zoom = 1.0
+                
             biome_manager.update(dt)
             # A velocidade real é a soma da velocidade base com o momentum do player
             raw_total_speed = biome_manager.current_speed + player.momentum
@@ -178,28 +199,44 @@ def main():
             
             # 2. UPDATES
             player.update(dt, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.get_ground_slope)
-            camera.update(player.rect, total_speed, dt)
-            monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.start_phase)
-            particle_manager.update(dt, current_biome.name)
+            
+            # Verificar se o jogador está sobre um buraco para travar a descida da câmera
+            player_world_x = player.rect.centerx + biome_manager.camera_offset
+            is_on_hole = biome_manager.get_ground_height(player_world_x) is None
+            
+            camera.update(player.rect, total_speed, dt, is_on_hole)
+            
+            # Suprimir monstros na avalanche e reta final
+            stop_monsters = biome_manager.start_phase or biome_manager.is_avalanche or biome_manager.is_final_stretch
+            monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, stop_monsters)
+            
+            # Efeito de Avalanche nas partículas
+            particle_mode = "avalanche" if biome_manager.is_avalanche else current_biome.name
+            particle_manager.update(dt, particle_mode, biome_manager.camera_offset, camera.y)
             
             # 1. VERIFICAR MORTE (COLISÃO OU QUEDA)
-            # A queda é baseada na posição vertical relativa à câmera (screen y)
+            # Pegar altura bruta do terreno (incluindo o que estaria sob o buraco)
+            raw_ground_height = biome_manager.get_raw_ground_height(player_world_x)
+            
+            # A morte ocorre se:
+            # - Bateu em inimigo (collision_result == True)
+            # - Caiu no buraco (está mais abaixo que o chão teórico)
+            # - Caiu muito abaixo da tela (fallback)
             player_screen_y = player.rect.centery + ((HEIGHT * 0.6) - camera.y)
             
-            if collision_result == True or player_screen_y > HEIGHT + 100:
+            if (collision_result == True or 
+                player.rect.top > raw_ground_height + 150 or 
+                player_screen_y > HEIGHT + 150):
                 state.current_state = state.GameState.GAME_OVER
                 
-            # 3. VERIFICAR SPAWN DO BAÚ FINAL (No final do 3º Bioma)
-            # Spawn quando estiver no bioma 3 (Snow) e após percorrer a distância final
-            # Usando time_elapsed como proxy para distância (6s * 400px/s ~= 2400 units)
-            if biome_manager.current_idx == 2 and biome_manager.time_elapsed > 6 and not monster_manager.final_chest:
-                # Procurar terreno plano à frente
-                spawn_x = biome_manager.camera_offset + 900
-                slope = biome_manager.get_ground_slope(spawn_x)
-                if abs(slope) < 0.05: # Terreno plano
-                    ground_y = biome_manager.get_ground_height(spawn_x)
-                    if ground_y:
-                        monster_manager.spawn_final_chest(spawn_x, ground_y)
+            # 3. VERIFICAR SPAWN DO BAÚ FINAL
+            # Agora o spawn ocorre no final da reta final (is_final_stretch)
+            if biome_manager.is_final_stretch and not monster_manager.final_chest:
+                # Spawn 1000 pixels à frente do ponto de início da reta final
+                spawn_x = biome_manager.final_trigger_x + 800
+                ground_y = biome_manager.get_ground_height(spawn_x)
+                if ground_y:
+                    monster_manager.spawn_final_chest(spawn_x, ground_y)
 
         # 3. RENDERING
         if state.current_state == state.GameState.MENU:
@@ -207,10 +244,10 @@ def main():
             
         elif state.current_state == state.GameState.PLAYING:
             bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
-            particle_manager.draw(screen)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            biome_manager.draw_ground(screen, camera)
+            particle_manager.draw(screen, camera, biome_manager.camera_offset)
+            monster_manager.draw(screen, camera)
+            player.draw(screen, camera)
             
             font = pygame.font.Font(None, 36)
             score_text = font.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
@@ -218,19 +255,19 @@ def main():
             
         elif state.current_state == state.GameState.GAME_OVER:
             bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
-            particle_manager.draw(screen)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            biome_manager.draw_ground(screen, camera)
+            particle_manager.draw(screen, camera, biome_manager.camera_offset)
+            monster_manager.draw(screen, camera)
+            player.draw(screen, camera)
             
             game_over_ui.draw(screen)
 
         elif state.current_state == state.GameState.ENDING:
             # Renderiza o mundo estático ao fundo
             bg_manager.draw(screen)
-            biome_manager.draw_ground(screen, camera.y)
-            monster_manager.draw(screen, camera.y)
-            player.draw(screen, camera.y)
+            biome_manager.draw_ground(screen, camera)
+            monster_manager.draw(screen, camera)
+            player.draw(screen, camera)
             
             # Fade and Text
             if state.fade_alpha < 255:

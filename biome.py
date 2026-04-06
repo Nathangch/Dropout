@@ -47,6 +47,12 @@ class BiomeManager:
         self.start_phase = True
         self.start_distance_limit = 1800 
         
+        # ENDING SEQUENCE STATE
+        self.is_avalanche = False
+        self.is_final_stretch = False
+        self.end_trigger_x = 0
+        self.final_trigger_x = 0
+        
     def reset(self):
         self.current_idx = 0
         self.time_elapsed = 0
@@ -59,9 +65,21 @@ class BiomeManager:
         self.gap_zones = []
         self.last_gap_gen_x = 500 # Safe zone
         self.start_phase = True
+        
+        # ENDING SEQUENCE
+        self.is_avalanche = False
+        self.is_final_stretch = False
+        self.end_trigger_x = 0
+        self.final_trigger_x = 0
+        
         self._maintain_gaps()
         
     def _maintain_gaps(self):
+        # SUPPRESS GAPS IN ENDING SEQUENCE
+        if self.is_avalanche or self.is_final_stretch:
+            self.gap_zones = []
+            return
+
         # Gera buracos para os próximos pixels à frente
         while self.last_gap_gen_x < self.camera_offset + 2000:
             # Pula um espaço de terreno sólido
@@ -126,31 +144,68 @@ class BiomeManager:
         # 7. MANTER GAPS E START PHASE
         if self.camera_offset > self.start_distance_limit:
             self.start_phase = False
+            
+        # TRIGGER AVALANCHE (Ending Sequence)
+        # 15s após entrar no Bioma 3 (Snow)
+        if self.current_idx == 2 and self.time_elapsed > 15 and not self.is_avalanche and not self.is_final_stretch:
+            self.is_avalanche = True
+            self.end_trigger_x = self.camera_offset
+            # A avalanche dura aproximadamente 15 segundos
+            self.final_trigger_x = self.camera_offset + 15 * self.current_speed
+            
+        # Marcar fim da avalanche
+        if self.is_avalanche and self.camera_offset > self.final_trigger_x:
+            self.is_avalanche = False
+            self.is_final_stretch = True
+            
         self._maintain_gaps()
                 
     def get_current(self):
         return self.biomes[self.current_idx]
         
-    def get_ground_height(self, world_x):
-        # 1. VERIFICAR BURACOS
-        for g_start, g_end in self.gap_zones:
-            if g_start <= world_x <= g_end:
-                return None
-        
-        # y = A * sin(f * x + phase) + offset
+    def _get_base_raw_height(self, world_x):
+        # Calcula a altura teórica do terreno ignorando buracos
         y = self.amplitude * math.sin(self.frequency * world_x + self.phase) + self.base_height
         
         # Start Phase: rampa linear suave descendente
-        # Mantemos a continuidade: após o limite, o offset de 250px permanece constante
         if world_x < self.start_distance_limit:
             y += (world_x / self.start_distance_limit) * 250
         else:
             y += 250
             
-        # Filtro de Arredondamento (Remove micro-oscilação invisível)
         return round(y, 0)
+
+    def get_raw_ground_height(self, world_x):
+        # 1. FINAL STRETCH (Reta final plana)
+        if self.is_final_stretch and world_x > self.final_trigger_x:
+             # Manter a altura onde a avalanche terminou
+             return self._get_base_raw_height(self.end_trigger_x) + (self.final_trigger_x - self.end_trigger_x) * 0.18
+             
+        # 2. AVALANCHE (Descida contínua)
+        if (self.is_avalanche or self.is_final_stretch) and world_x > self.end_trigger_x:
+             # Descida constante a partir do ponto de trigger
+             return self._get_base_raw_height(self.end_trigger_x) + (world_x - self.end_trigger_x) * 0.18
+             
+        return self._get_base_raw_height(world_x)
+
+    def get_ground_height(self, world_x):
+        # 1. VERIFICAR BURACOS (Apenas se não for avalanche)
+        if not self.is_avalanche and not self.is_final_stretch:
+            for g_start, g_end in self.gap_zones:
+                if g_start <= world_x <= g_end:
+                    return None
+        
+        return self.get_raw_ground_height(world_x)
         
     def get_ground_slope(self, world_x):
+        # 1. FINAL STRETCH (Reta Plana)
+        if self.is_final_stretch and world_x > self.final_trigger_x:
+            return 0.0
+            
+        # 2. AVALANCHE (Descida Constante)
+        if (self.is_avalanche or self.is_final_stretch) and world_x > self.end_trigger_x:
+            return 0.18 # Slope constante de descida
+            
         # Derivada da função seno: y' = A * f * cos(f * x + phase)
         slope = self.amplitude * self.frequency * math.cos(self.frequency * world_x + self.phase)
         
@@ -163,8 +218,9 @@ class BiomeManager:
     def draw_background(self, surface):
         surface.fill(self.get_current().bg_color)
         
-    def draw_ground(self, surface, camera_y):
+    def draw_ground(self, surface, camera):
         name = self.get_current().name
+        zoom = camera.zoom
         ground_color = (100, 200, 100)
         
         if name == "plains": 
@@ -177,18 +233,23 @@ class BiomeManager:
         screen_width = surface.get_width()
         screen_height = surface.get_height()
         
-        # Calculamos o deslocamento vertical para centralizar a visão no player
-        # camera_y é o foco. Queremos que camera_y fique em aprox. 60% da tela.
-        offset_y = (screen_height * 0.6) - camera_y
+        # Deslocamento vertical escalado
+        offset_y = (screen_height * 0.6) - camera.y * zoom
         
         current_points = []
-        # Amostragem mais larga (step 15) para remover ruído
-        for x in range(0, screen_width + 30, 15):
+        # Amostragem ajustada pelo zoom (mais pontos se zoom out?)
+        # Na verdade Mantendo o passo 15 e escalando o X final
+        step = int(15 * zoom) if zoom > 1.0 else 15
+        
+        for x in range(0, int(screen_width / zoom) + 100, step):
             world_x = x + self.camera_offset
             y = self.get_ground_height(world_x)
             
             if y is not None:
-                current_points.append((x, y + offset_y))
+                # Escala a partir do foco X=100
+                display_x = (x - 100) * zoom + 100
+                display_y = y * zoom + offset_y
+                current_points.append((display_x, display_y))
             else:
                 if len(current_points) > 1:
                     self._draw_poly(surface, current_points, ground_color, screen_height)
@@ -200,9 +261,9 @@ class BiomeManager:
     def _draw_poly(self, surface, points, color, screen_height):
         # Fill polygon
         poly_points = points.copy()
-        # O polígono deve descer até bem abaixo da tela para não vermos o corte
-        poly_points.append((points[-1][0], screen_height + 500))
-        poly_points.append((points[0][0], screen_height + 500))
+        # O polígono deve descer até BEM abaixo da tela para evitar partes em branco no zoom
+        poly_points.append((points[-1][0], screen_height + 2000))
+        poly_points.append((points[0][0], screen_height + 2000))
         pygame.draw.polygon(surface, color, poly_points)
         # Draw white top line
         pygame.draw.lines(surface, (255, 255, 255), False, points, 3)

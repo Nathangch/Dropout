@@ -2,94 +2,104 @@ import pygame
 import random
 
 class Particle:
-    def __init__(self, x, y, vx, vy, size, lifetime, color):
-        self.x = x
-        self.y = y
+    def __init__(self, x, y, vx, vy, size, lifetime, color, is_world_space=False):
+        self.x = x # Se is_world_space for True, isso é world_x
+        self.y = y # Se is_world_space for True, isso é world_y
         self.vx = vx
         self.vy = vy
         self.size = size
         self.lifetime = lifetime
         self.max_lifetime = lifetime
         self.color = color
+        self.is_world_space = is_world_space
 
     def update(self, dt):
         self.x += self.vx * 60 * dt
         self.y += self.vy * 60 * dt
         self.lifetime -= 60 * dt
 
-    def draw(self, screen):
+    def draw(self, screen, camera, camera_offset=0):
+        zoom = camera.zoom
+        
+        if self.is_world_space:
+            # Coordenadas relativas ao mundo e câmera
+            display_x = (self.x - camera_offset - 100) * zoom + 100
+            display_y = (self.y - camera.y) * zoom + (screen.get_height() * 0.6)
+        else:
+            # Efeito fixo na tela (paralaxe/clima)
+            display_x = (self.x - 100) * zoom + 100
+            display_y = (self.y - (screen.get_height() * 0.6)) * zoom + (screen.get_height() * 0.6)
+            
         alpha = int(255 * (self.lifetime / self.max_lifetime))
         if alpha <= 0: return
         
-        # Create a tiny surface for the particle with alpha
-        # Note: For even better performance with many particles, pre-rendering different sizes/alphas or using individual pixels would be faster.
-        # But for 100 particles, this is perfectly fine.
-        surf = pygame.Surface((self.size*2, self.size*2), pygame.SRCALPHA)
-        pygame.draw.circle(surf, (*self.color, alpha), (self.size, self.size), self.size)
-        screen.blit(surf, (int(self.x - self.size), int(self.y - self.size)))
+        scaled_size = max(1, int(self.size * zoom))
+        
+        # Desenho
+        if alpha < 200:
+            surf = pygame.Surface((scaled_size*2, scaled_size*2), pygame.SRCALPHA)
+            pygame.draw.circle(surf, (*self.color, alpha), (scaled_size, scaled_size), scaled_size)
+            screen.blit(surf, (int(display_x - scaled_size), int(display_y - scaled_size)))
+        else:
+            pygame.draw.circle(screen, self.color, (int(display_x), int(display_y)), scaled_size)
 
 class ParticleManager:
     def __init__(self, width, height):
         self.width = width
         self.height = height
         self.particles = []
-        self.max_particles = 100
+        self.max_particles = 400
         self.spawn_timer = 0
 
-    def spawn_particle(self, biome_name):
+    def spawn_particle(self, biome_name, camera_offset=0, camera_y=0):
         if len(self.particles) >= self.max_particles:
             return
 
         if biome_name == "snow":
-            x = random.randint(0, self.width)
-            y = -10
-            vx = random.uniform(-0.5, 0.5)
-            vy = random.uniform(1, 2.5)
-            size = random.randint(1, 3)
-            lifetime = random.randint(200, 400)
-            color = (255, 255, 255)
-            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color))
+            x, y = random.randint(0, self.width), -10
+            vx, vy = random.uniform(-0.5, 0.5), random.uniform(1, 2.5)
+            self.particles.append(Particle(x, y, vx, vy, random.randint(1, 3), random.randint(200, 400), (255, 255, 255)))
+
+        elif biome_name == "avalanche":
+            # Avalanche: Criar uma "parede" de neve vindo de trás/cima
+            for _ in range(25): # Densidade extrema
+                # Spawna ao redor da câmera, concentrando "atrás" (esquerda) do player
+                wx = camera_offset + random.randint(-400, 1000)
+                wy = camera_y + random.randint(-600, 400)
+                
+                # Velocidade alta para um efeito de "blizzard"
+                vx = random.uniform(-18, -8) 
+                vy = random.uniform(4, 10)
+                
+                # Cores variadas para profundidade
+                color = random.choice([(255, 255, 255), (220, 240, 255), (180, 200, 230), (255, 255, 240)])
+                size = random.randint(4, 12) # Partículas maiores para cobrir "buracos" visuais
+                self.particles.append(Particle(wx, wy, vx, vy, size, random.randint(40, 90), color, is_world_space=True))
 
         elif biome_name == "desert":
-            x = self.width + 10
-            y = random.randint(0, self.height)
-            vx = random.uniform(-4, -2)
-            vy = random.uniform(-0.5, 0.5)
-            size = random.randint(1, 2)
-            lifetime = random.randint(80, 150)
-            color = (194, 178, 128)
-            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color))
+            x, y = self.width + 10, random.randint(0, self.height)
+            vx, vy = random.uniform(-4, -2), random.uniform(-0.5, 0.5)
+            self.particles.append(Particle(x, y, vx, vy, random.randint(1, 2), random.randint(80, 150), (194, 178, 128)))
 
         elif biome_name == "plains":
-            x = random.randint(0, self.width)
-            y = random.randint(-10, self.height)
-            vx = random.uniform(-1, 0.5)
-            vy = random.uniform(0.2, 1.0)
-            size = random.randint(1, 3)
-            lifetime = random.randint(150, 300)
-            color = (76, 153, 0) # Green leaf color
-            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color))
+            x, y = random.randint(0, self.width), random.randint(-10, self.height)
+            vx, vy = random.uniform(-1, 0.5), random.uniform(0.2, 1.0)
+            self.particles.append(Particle(x, y, vx, vy, random.randint(1, 3), random.randint(150, 300), (76, 153, 0)))
 
     def spawn_burst(self, x, y, color, count=20):
         for _ in range(count):
-            vx = random.uniform(-4, 4)
-            vy = random.uniform(-6, -1)
-            size = random.randint(3, 7)
-            lifetime = random.randint(40, 100)
-            self.particles.append(Particle(x, y, vx, vy, size, lifetime, color))
+            self.particles.append(Particle(x, y, random.uniform(-4, 4), random.uniform(-6, -1), random.randint(3, 7), random.randint(40, 100), color))
 
-    def update(self, dt, biome_name):
+    def update(self, dt, biome_name, camera_offset=0, camera_y=0):
         self.spawn_timer += dt
-        if self.spawn_timer > 0.05: # Spawn every 50ms approx
-            self.spawn_particle(biome_name)
+        spawn_rate = 0.015 if biome_name == "avalanche" else 0.05
+        if self.spawn_timer > spawn_rate:
+            self.spawn_particle(biome_name, camera_offset, camera_y)
             self.spawn_timer = 0
-
-        for p in self.particles:
-            p.update(dt)
-
+        for p in self.particles: p.update(dt)
         self.particles = [p for p in self.particles if p.lifetime > 0]
 
-    def draw(self, screen):
+    def draw(self, screen, camera, camera_offset=0):
         for p in self.particles:
-            p.draw(screen)
+            p.draw(screen, camera, camera_offset)
 
