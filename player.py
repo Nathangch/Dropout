@@ -125,20 +125,29 @@ class Player:
                 self.rect.x = max(target_x, self.rect.x - pullback_speed * dt)
             elif self.rect.x < target_x:
                 self.rect.x = min(target_x, self.rect.x + 200 * dt)
+            
+            # Gravidade apenas se não estiver grudado no chão
+            if not self.is_grounded:
+                self.vy += current_gravity * dt
                 
-            self.vy += current_gravity * dt
-
         self.rect.y += self.vy * dt
         
-        # CHECAGEM DO CHÃO
+        # CHECAGEM DO CHÃO (Sticky Ground para evitar quicar nas descidas)
         current_ground_y = get_ground_height(world_x)
         if current_ground_y is not None:
-            if self.rect.bottom >= current_ground_y:
+            # Diferença entre os pés do player e o chão real
+            # Se for positiva: o player "atravessou" o chão
+            # Se for negativa (pequena): o player está "perto" o suficiente para grudar
+            ground_diff = self.rect.bottom - current_ground_y
+            
+            # Limite de 15 pixels para grudar (stickiness)
+            if ground_diff >= -15:
+                # Grudar no chão
                 self.rect.bottom = current_ground_y
                 if self.vy > 0:
                     self.vy = 0
                 self.is_grounded = True
-                self.jump_count = 0 # Reseta os pulos ao tocar o chão
+                self.jump_count = 0 
             else:
                 self.is_grounded = False
         else:
