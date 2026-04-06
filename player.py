@@ -141,11 +141,12 @@ class Player:
             ground_diff = self.rect.bottom - current_ground_y
             
             # Limite de 15 pixels para grudar (stickiness)
-            if ground_diff >= -15:
+            # IMPORTANTE: Só grudar se estiver caindo ou no chão (vy >= 0)
+            # Caso contrário, o player não consegue pular pois é sugado de volta
+            if ground_diff >= -15 and self.vy >= 0:
                 # Grudar no chão
                 self.rect.bottom = current_ground_y
-                if self.vy > 0:
-                    self.vy = 0
+                self.vy = 0
                 self.is_grounded = True
                 self.jump_count = 0 
             else:
