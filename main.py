@@ -73,8 +73,17 @@ def main():
     biome_manager = BiomeManager()
     bg_manager = BackgroundManager()
     camera = Camera(WIDTH, HEIGHT)
-    ending_ui = EndingUI(WIDTH, HEIGHT)
-    story_ui = StoryUI(WIDTH, HEIGHT, pygame.font.Font(None, 28), pygame.font.Font(None, 48), pygame.font.Font(None, 36))
+    
+    # Pre-load fonts to prevent memory leaks/crashes in the EXE
+    font_small = pygame.font.Font(None, 28)
+    font_medium = pygame.font.Font(None, 36)
+    font_large = pygame.font.Font(None, 48)
+    font_giant = pygame.font.Font(None, 64)
+    
+    ending_ui = EndingUI(WIDTH, HEIGHT, font_small, font_giant, font_medium)
+    story_ui = StoryUI(WIDTH, HEIGHT, font_small, font_large, font_medium)
+    
+    self_font_medium = font_medium # Local reference for main loop
     
     # Sound initialization placeholder
     try:
@@ -269,8 +278,8 @@ def main():
             monster_manager.draw(screen, camera)
             player.draw(screen, camera)
             
-            font = pygame.font.Font(None, 36)
-            score_text = font.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
+            # Use pre-loaded font
+            score_text = self_font_medium.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
             screen.blit(score_text, (10, 10))
             
         elif state.current_state == state.GameState.GAME_OVER:

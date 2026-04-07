@@ -21,6 +21,7 @@ class Button:
 class MenuUI:
     def __init__(self, width, height):
         self.font = pygame.font.Font(None, 48)
+        self.title_font = pygame.font.Font(None, 72)
         self.btn_iniciar = Button(width//2 - 100, height//2 - 60, 200, 50, "Iniciar Jogo", self.font)
         self.btn_sair = Button(width//2 - 100, height//2 + 20, 200, 50, "Sair", self.font)
         
@@ -33,8 +34,7 @@ class MenuUI:
         
     def draw(self, surface):
         surface.fill((50, 50, 50))
-        title_font = pygame.font.Font(None, 72)
-        title_surf = title_font.render("Runner Game", True, (255, 255, 255))
+        title_surf = self.title_font.render("Runner Game", True, (255, 255, 255))
         title_rect = title_surf.get_rect(center=(surface.get_width()//2, surface.get_height()//4))
         surface.blit(title_surf, title_rect)
         
@@ -44,6 +44,7 @@ class MenuUI:
 class GameOverUI:
     def __init__(self, width, height):
         self.font = pygame.font.Font(None, 48)
+        self.title_font = pygame.font.Font(None, 72)
         self.btn_reiniciar = Button(width//2 - 100, height//2 - 60, 200, 50, "Reiniciar", self.font)
         self.btn_sair = Button(width//2 - 100, height//2 + 20, 200, 50, "Sair", self.font)
         
@@ -61,8 +62,7 @@ class GameOverUI:
         overlay.fill((0, 0, 0))
         surface.blit(overlay, (0, 0))
         
-        title_font = pygame.font.Font(None, 72)
-        title_surf = title_font.render("GAME OVER", True, (255, 50, 50))
+        title_surf = self.title_font.render("GAME OVER", True, (255, 50, 50))
         title_rect = title_surf.get_rect(center=(surface.get_width()//2, surface.get_height()//4))
         surface.blit(title_surf, title_rect)
         
@@ -70,12 +70,12 @@ class GameOverUI:
         self.btn_sair.draw(surface)
 
 class EndingUI:
-    def __init__(self, width, height):
+    def __init__(self, width, height, font_text, font_title, font_button):
         self.width = width
         self.height = height
-        self.font_text = pygame.font.Font(None, 32)
-        self.font_title = pygame.font.Font(None, 64)
-        self.font_button = pygame.font.Font(None, 36)
+        self.font_text = font_text
+        self.font_title = font_title
+        self.font_button = font_button
         
         self.btn_reiniciar = Button(width//2 - 120, height - 135, 240, 50, "Jogar Novamente", self.font_button, bg_color=(50, 200, 100), text_color=(255, 255, 255))
         self.btn_sair = Button(width//2 - 120, height - 70, 240, 50, "Sair do Jogo", self.font_button, bg_color=(200, 50, 50), text_color=(255, 255, 255))
