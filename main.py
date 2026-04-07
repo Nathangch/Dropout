@@ -8,7 +8,7 @@ from player import Player
 from monster import MonsterManager
 from background import BackgroundManager
 from particles import ParticleManager
-import random
+from utils import resource_path
 
 WIDTH = 800
 HEIGHT = 600
@@ -82,8 +82,9 @@ def main():
         # Se o usuário tiver um arquivo de som "sing.wav", ele tocará
         # Caso contrário, ignoramos para não quebrar o jogo
         sing_sound = None
-        if os.path.exists("assets/sing.wav"):
-            sing_sound = pygame.mixer.Sound("assets/sing.wav")
+        sound_path = resource_path("assets/sing.wav")
+        if os.path.exists(sound_path):
+            sing_sound = pygame.mixer.Sound(sound_path)
     except:
         sing_sound = None
     

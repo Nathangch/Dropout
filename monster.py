@@ -2,6 +2,7 @@ import pygame
 import random
 import os
 import math
+from utils import resource_path
 
 class Monster:
     def __init__(self, world_x, initial_ground_y, m_type):
@@ -35,7 +36,7 @@ class Monster:
             self.vx = 0
             
     def load_sprites(self):
-        path = f"assets/enemies/{self.m_type}/"
+        path = resource_path(f"assets/enemies/{self.m_type}/")
         if os.path.exists(path):
             for file in sorted(os.listdir(path)):
                 if file.endswith('.png'):

@@ -1,5 +1,6 @@
-import pygame
 import os
+import pygame
+from utils import resource_path
 
 class Background:
     def __init__(self, biome_name, layer_paths, speeds):
@@ -13,8 +14,9 @@ class Background:
         self.layers = []
         self.offsets = []
         for path in self.layer_paths:
-            if os.path.exists(path):
-                img = pygame.image.load(path).convert_alpha()
+            final_path = resource_path(path)
+            if os.path.exists(final_path):
+                img = pygame.image.load(final_path).convert_alpha()
                 self.layers.append(img)
             else:
                 # Fallback empty surface
