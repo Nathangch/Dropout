@@ -9,6 +9,7 @@ from monster import MonsterManager
 from background import BackgroundManager
 from particles import ParticleManager
 from utils import resource_path
+import random
 
 WIDTH = 800
 HEIGHT = 600
