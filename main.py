@@ -2,7 +2,7 @@ import pygame
 import sys
 import os
 import state
-from ui import MenuUI, GameOverUI, EndingUI
+from ui import MenuUI, GameOverUI, EndingUI, StoryUI
 from biome import BiomeManager
 from player import Player
 from monster import MonsterManager
@@ -74,6 +74,7 @@ def main():
     bg_manager = BackgroundManager()
     camera = Camera(WIDTH, HEIGHT)
     ending_ui = EndingUI(WIDTH, HEIGHT)
+    story_ui = StoryUI(WIDTH, HEIGHT, pygame.font.Font(None, 28), pygame.font.Font(None, 48), pygame.font.Font(None, 36))
     
     # Sound initialization placeholder
     try:
@@ -126,6 +127,14 @@ def main():
         elif state.current_state == state.GameState.MENU:
             if click_pos:
                 new_state = menu_ui.handle_click(click_pos)
+                if new_state:
+                    state.current_state = getattr(state.GameState, new_state)
+                    if state.current_state == state.GameState.PLAYING:
+                        reset_game(player, monster_manager, biome_manager, bg_manager, camera)
+                        
+        elif state.current_state == state.GameState.STORY:
+            if click_pos:
+                new_state = story_ui.handle_click(click_pos)
                 if new_state:
                     state.current_state = getattr(state.GameState, new_state)
                     if state.current_state == state.GameState.PLAYING:
@@ -221,12 +230,18 @@ def main():
             # A morte ocorre se:
             # - Bateu em inimigo (collision_result == True)
             # - Caiu no buraco (está mais abaixo que o chão teórico)
+            # - Foi engolido pela avalanche (se estiver muito à esquerda na tela)
             # - Caiu muito abaixo da tela (fallback)
             player_screen_y = player.rect.centery + ((HEIGHT * 0.6) - camera.y)
+            player_screen_x = (player.rect.centerx - 100) * camera.zoom + 100
+            
+            # Avalanche catch check: A frente da avalanche está em base_x ≈ 50
+            is_caught_by_avalanche = biome_manager.is_avalanche and player_screen_x < 50
             
             if (collision_result == True or 
                 player.rect.top > raw_ground_height + 150 or 
-                player_screen_y > HEIGHT + 150):
+                player_screen_y > HEIGHT + 150 or
+                is_caught_by_avalanche):
                 state.current_state = state.GameState.GAME_OVER
                 
             # 3. VERIFICAR SPAWN DO BAÚ FINAL
@@ -242,9 +257,13 @@ def main():
         if state.current_state == state.GameState.MENU:
             menu_ui.draw(screen)
             
+        elif state.current_state == state.GameState.STORY:
+            story_ui.draw(screen)
+            
         elif state.current_state == state.GameState.PLAYING:
             bg_manager.draw(screen)
             biome_manager.draw_ground(screen, camera)
+            biome_manager.draw_avalanche(screen, camera)
             particle_manager.draw(screen, camera, biome_manager.camera_offset)
             monster_manager.draw(screen, camera)
             player.draw(screen, camera)
@@ -256,6 +275,7 @@ def main():
         elif state.current_state == state.GameState.GAME_OVER:
             bg_manager.draw(screen)
             biome_manager.draw_ground(screen, camera)
+            biome_manager.draw_avalanche(screen, camera)
             particle_manager.draw(screen, camera, biome_manager.camera_offset)
             monster_manager.draw(screen, camera)
             player.draw(screen, camera)

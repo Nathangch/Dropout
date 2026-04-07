@@ -3,7 +3,8 @@ class GameState:
     PLAYING = "PLAYING"
     GAME_OVER = "GAME_OVER"
     ENDING = "ENDING"
+    STORY = "STORY"
     EXIT = "EXIT"
 
-current_state = GameState.MENU
+current_state = "MENU"
 fade_alpha = 0

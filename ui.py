@@ -26,7 +26,7 @@ class MenuUI:
         
     def handle_click(self, mouse_pos):
         if self.btn_iniciar.is_clicked(mouse_pos):
-            return "PLAYING"
+            return "STORY"
         if self.btn_sair.is_clicked(mouse_pos):
             return "EXIT"
         return None
@@ -77,8 +77,8 @@ class EndingUI:
         self.font_title = pygame.font.Font(None, 64)
         self.font_button = pygame.font.Font(None, 36)
         
-        self.btn_reiniciar = Button(width//2 - 120, height - 140, 240, 50, "Jogar Novamente", self.font_button, bg_color=(50, 200, 100), text_color=(255, 255, 255))
-        self.btn_sair = Button(width//2 - 120, height - 75, 240, 50, "Sair do Jogo", self.font_button, bg_color=(200, 50, 50), text_color=(255, 255, 255))
+        self.btn_reiniciar = Button(width//2 - 120, height - 135, 240, 50, "Jogar Novamente", self.font_button, bg_color=(50, 200, 100), text_color=(255, 255, 255))
+        self.btn_sair = Button(width//2 - 120, height - 70, 240, 50, "Sair do Jogo", self.font_button, bg_color=(200, 50, 50), text_color=(255, 255, 255))
         
         self.narrative = [
             "Após atravessar montanhas, nevascas e perigos,",
@@ -146,7 +146,8 @@ class EndingUI:
             if "lenda" in line: color = (255, 215, 0)
             
             text_surf = self.font_text.render(line, True, color)
-            text_rect = text_surf.get_rect(center=(self.width//2, 160 + i * 30))
+            # Ajustado para 130 e espaçamento de 24
+            text_rect = text_surf.get_rect(center=(self.width//2, 130 + i * 24))
             
             # Fade in effect for the last visible line
             if i == self.visible_lines - 1:
@@ -160,3 +161,56 @@ class EndingUI:
             self.btn_reiniciar.draw(surface)
             self.btn_sair.draw(surface)
 
+class StoryUI:
+    def __init__(self, width, height, font_text, font_title, font_btn):
+        self.width = width
+        self.height = height
+        self.font_text = font_text
+        self.font_title = font_title
+        self.font_btn = font_btn
+        
+        self.btn_comecar = Button(width//2 - 140, height - 100, 280, 50, "Pressione para Jogar", self.font_btn, bg_color=(50, 200, 100), text_color=(255, 255, 255))
+        
+        self.story = [
+            "Você provavelmente já ouviu falar de mim...",
+            "Eu sou Japeth, o bode das montanhas.",
+            "",
+            "Há muito tempo, fui amaldiçoado por uma bruxa,",
+            "e agora sou condenada a cantar tudo o que digo.",
+            "ISSO MESMO... TUDO!",
+            "",
+            "Minha única esperança é encontrar o 'Berrante Silencioso',",
+            "escondido além das neves eternas.",
+            "",
+            "Eu preciso correr, saltar e desviar de perigos...",
+            "antes que minha voz desapareça para sempre!",
+            "",
+            "Ajude-me a quebrar essa maldição musical!"
+        ]
+        
+    def handle_click(self, mouse_pos):
+        if self.btn_comecar.is_clicked(mouse_pos):
+            return "PLAYING"
+        return None
+        
+    def draw(self, surface):
+        surface.fill((20, 25, 40)) # Tom escuro azulado
+        
+        # Desenhar borda decorativa
+        pygame.draw.rect(surface, (255, 255, 200), (40, 40, self.width - 80, self.height - 80), 3)
+        
+        title_surf = self.font_title.render("A MISSÃO DE JAPETH", True, (255, 255, 100))
+        title_rect = title_surf.get_rect(center=(self.width//2, 80))
+        surface.blit(title_surf, title_rect)
+        
+        for i, line in enumerate(self.story):
+            color = (230, 230, 230)
+            if "cantando" in line or "cantar" in line or "musica" in line: color = (150, 200, 255)
+            if "Japeth" in line: color = (255, 215, 100)
+            
+            text_surf = self.font_text.render(line, True, color)
+            # Iniciando em 135 e espaçamento de 24 para garantir o encaixe
+            text_rect = text_surf.get_rect(center=(self.width//2, 135 + i * 24))
+            surface.blit(text_surf, text_rect)
+            
+        self.btn_comecar.draw(surface)

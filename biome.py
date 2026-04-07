@@ -267,3 +267,77 @@ class BiomeManager:
         pygame.draw.polygon(surface, color, poly_points)
         # Draw white top line
         pygame.draw.lines(surface, (255, 255, 255), False, points, 3)
+
+    def draw_avalanche(self, surface, camera):
+        """Desenha uma parede de neve massiva que persegue o jogador"""
+        if not self.is_avalanche and not self.is_final_stretch:
+            return
+            
+        zoom = camera.zoom
+        screen_width = surface.get_width()
+        screen_height = surface.get_height()
+        
+        # Posição horizontal da 'frente' da avalanche na tela
+        # O player costuma estar em display_x ~ 100.
+        base_x = 50 
+        
+        # Transição de entrada (fade in progressivo)
+        intro_dist = 500
+        intro_progress = min(1.0, (self.camera_offset - self.end_trigger_x) / intro_dist) if self.is_avalanche else 1.0
+        
+        if self.is_final_stretch:
+            # Na reta final, a avalanche fica para trás
+            dist_past = self.camera_offset - self.final_trigger_x
+            base_x -= dist_past * 0.8
+            if base_x < -800: return
+
+        # Ajuste de base_x para a animação de entrada
+        current_base_x = base_x - (1.0 - intro_progress) * 400
+
+        # Desenhar camadas (do fundo para a frente)
+        layers = [
+            {"color": (200, 220, 240), "offset": 80, "speed": 0.03},  # Camada interna/sombra
+            {"color": (230, 240, 255), "offset": 40, "speed": 0.05},  # Camada média
+            {"color": (255, 255, 255), "offset": 0,  "speed": 0.07}   # Camada frontal branca
+        ]
+
+        for layer in layers:
+            points = []
+            l_offset = layer["offset"]
+            l_speed = layer["speed"]
+            
+            for y in range(-200, screen_height + 400, 40):
+                time_var = self.camera_offset * l_speed
+                variation = math.sin(y * 0.02 + time_var) * 30
+                variation += math.cos(y * 0.05 - time_var * 0.5) * 15
+                
+                px = current_base_x - l_offset + variation
+                
+                # Cálculo de posição na tela usando o player (X=100) como âncora do zoom
+                px_screen = (px - 100) * zoom + 100
+                
+                # Efeito de 'onda' na base (a avalanche se espalha no chão)
+                world_x = self.camera_offset + (px - 100)
+                ground_y = self.get_ground_height(world_x)
+                if ground_y:
+                    # offset_y local baseado na câmera
+                    screen_ground_y = ground_y * zoom + (screen_height * 0.6) - camera.y * zoom
+                    if y > screen_ground_y - 20:
+                        px_screen += (y - (screen_ground_y - 20)) * 0.6
+                
+                points.append((px_screen, y))
+            
+            # Fechar o polígono na esquerda (bem longe)
+            points.append((-1500, screen_height + 400))
+            points.append((-1500, -200))
+            
+            # Desenhar a camada
+            pygame.draw.polygon(surface, layer["color"], points)
+            
+            # Adicionar 'bolas' de neve na crista da camada frontal para parecer fofo/volumoso
+            if layer["color"] == (255, 255, 255):
+                for i in range(0, len(points), 3):
+                    p = points[i]
+                    if p[0] > -100: # Apenas se visível
+                        r = (40 + math.sin(i + self.camera_offset * 0.1) * 20) * zoom
+                        pygame.draw.circle(surface, (255, 255, 255), (int(p[0]), int(p[1])), int(r))
