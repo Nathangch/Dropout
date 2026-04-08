@@ -7,7 +7,9 @@ class Player:
     
     def __init__(self, x, initial_ground_y):
         spawn_y = initial_ground_y if initial_ground_y is not None else 400
-        self.rect = pygame.Rect(x, spawn_y - 75, 60, 75)
+        self.base_width = 60
+        self.base_height = 75
+        self.rect = pygame.Rect(x, spawn_y - self.base_height, self.base_width, self.base_height)
         self.vy = 0
         self.jump_strength = -650 
         
@@ -114,6 +116,10 @@ class Player:
             self.stamina -= self.stamina_cost_dash
             self.dash_cooldown = 0.5
             
+            # Reset animation for dash
+            self.current_frame = 0
+            self.anim_timer = 0
+            
         # 5. PULO (DUPLO)
         if jump_pressed and self.jump_count < self.max_jumps:
             strength = self.jump_strength
@@ -205,12 +211,21 @@ class Player:
         # 2. MOVIMENTO DASH HORIZONTAL
         if self.is_dashing:
             self.vy = 0 # Dash anula a queda temporalmente
-            self.rect.height = 30 # Abaixa para passar por baixo dos pássaros
+            
+            # Abaixa a hitbox para passar por baixo dos pássaros, preservando a posição do chão
+            if self.rect.height != 35:
+                bottom_at_start = self.rect.bottom
+                self.rect.height = 35 
+                self.rect.bottom = bottom_at_start
+                
             self.rect.x += self.dash_speed * dt
             self.dash_timer -= dt
             if self.dash_timer <= 0:
                 self.is_dashing = False
-                self.rect.height = 50 # Volta ao normal
+                # Volta ao normal preservando a posição do chão
+                bottom_at_end = self.rect.bottom
+                self.rect.height = self.base_height
+                self.rect.bottom = bottom_at_end
         else:
             # Puxar o jogador lentamente de volta ao X padrão
             target_x = 100
@@ -259,23 +274,30 @@ class Player:
         screen_x = (self.rect.x - 100) * zoom + 100
         screen_y = self.rect.y * zoom + offset_y
         
-        # Dimensões escaladas
-        w, h = int(self.rect.width * zoom), int(self.rect.height * zoom)
+        # Dimensões escaladas para desenho (independente da hitbox)
+        draw_w = int(self.base_width * zoom)
+        draw_h = int(self.base_height * zoom)
+        
+        # Hitbox real para referência (pode estar menor no dash)
+        rect_w, rect_h = int(self.rect.width * zoom), int(self.rect.height * zoom)
         
         # Surface temporária com alpha e escala
-        player_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        player_surf = pygame.Surface((draw_w, draw_h), pygame.SRCALPHA)
         color = (50, 255, 150) if self.is_gliding else ((255, 200, 50) if self.is_dashing else (50, 150, 255))
         
         if hasattr(self, 'image') and self.image:
-            scaled_img = pygame.transform.scale(self.image, (w, h)) if zoom != 1.0 else self.image
+            scaled_img = pygame.transform.scale(self.image, (draw_w, draw_h)) if zoom != 1.0 else self.image
             player_surf.blit(scaled_img, (0, 0))
         else:
-            pygame.draw.rect(player_surf, color, (0, 0, w, h), border_radius=max(1, int(5 * zoom)))
-            pygame.draw.rect(player_surf, (0, 0, 0), (0, 0, w, h), max(1, int(2 * zoom)), border_radius=max(1, int(5 * zoom)))
+            pygame.draw.rect(player_surf, color, (0, 0, draw_w, draw_h), border_radius=max(1, int(5 * zoom)))
+            pygame.draw.rect(player_surf, (0, 0, 0), (0, 0, draw_w, draw_h), max(1, int(2 * zoom)), border_radius=max(1, int(5 * zoom)))
             
         # Rotacionar com base no slope
         rotated_player = pygame.transform.rotate(player_surf, -self.angle)
-        rot_rect = rotated_player.get_rect(center=(int(screen_x + w/2), int(screen_y + h/2)))
+        # Centralizar o desenho na parte inferior da hitbox para manter os pés no chão
+        draw_center_x = screen_x + rect_w / 2
+        draw_center_y = screen_y + rect_h - draw_h / 2
+        rot_rect = rotated_player.get_rect(center=(int(draw_center_x), int(draw_center_y)))
         surface.blit(rotated_player, rot_rect)
         
         # UI Estamina (Design mais premium)

@@ -83,8 +83,10 @@ class WoodenButton:
         text_surf = self.font.render(self.text, True, text_color)
         shadow_surf = self.font.render(self.text, True, (50, 20, 0))
         
-        if text_surf.get_width() > self.rect.width - 20:
-            scale = (self.rect.width - 20) / float(text_surf.get_width())
+        available_width = self.rect.width - 80 if self.icon_type else self.rect.width - 20
+        
+        if text_surf.get_width() > available_width:
+            scale = available_width / float(text_surf.get_width())
             new_w = int(text_surf.get_width() * scale)
             new_h = int(text_surf.get_height() * scale)
             text_surf = pygame.transform.scale(text_surf, (new_w, new_h))
