@@ -50,6 +50,17 @@ class ParticleManager:
         self.particles = []
         self.max_particles = 400
         self.spawn_timer = 0
+        self.current_biome = "plains"
+        
+        # Pre-render overlays for performance
+        self.overlays = {
+            "desert": pygame.Surface((width, height), pygame.SRCALPHA),
+            "plains": pygame.Surface((width, height), pygame.SRCALPHA),
+            "snow": pygame.Surface((width, height), pygame.SRCALPHA)
+        }
+        self.overlays["desert"].fill((210, 180, 140, 80)) # Cor de areia transparente
+        self.overlays["plains"].fill((220, 230, 210, 60)) # Névoa verdeada clara
+        self.overlays["snow"].fill((255, 255, 255, 40))   # Névoa de neve leve
 
     def spawn_particle(self, biome_name, camera_offset=0, camera_y=0):
         if len(self.particles) >= self.max_particles:
@@ -91,6 +102,7 @@ class ParticleManager:
             self.particles.append(Particle(x, y, random.uniform(-4, 4), random.uniform(-6, -1), random.randint(3, 7), random.randint(40, 100), color))
 
     def update(self, dt, biome_name, camera_offset=0, camera_y=0):
+        self.current_biome = biome_name
         self.spawn_timer += dt
         spawn_rate = 0.015 if biome_name == "avalanche" else 0.05
         if self.spawn_timer > spawn_rate:
@@ -100,6 +112,32 @@ class ParticleManager:
         self.particles = [p for p in self.particles if p.lifetime > 0]
 
     def draw(self, screen, camera, camera_offset=0):
+        # 1. Desenhar partículas
         for p in self.particles:
             p.draw(screen, camera, camera_offset)
+            
+        # 2. Desenhar overlays de clima (Tempestade/Névoa)
+        import math
+        time_factor = pygame.time.get_ticks() * 0.001
+        
+        if self.current_biome in self.overlays:
+            overlay = self.overlays[self.current_biome]
+            # Efeito de pulsação na opacidade para parecer dinâmico
+            alpha_mod = math.sin(time_factor * 0.5) * 15
+            
+            # Criar uma cópia temporária se precisarmos mudar o alpha dinamicamente 
+            # (ou apenas blit com um valor se for suportado, mas blit surface é mais rápido)
+            if self.current_biome == "desert":
+                # Tempestade de areia mais intensa
+                screen.blit(overlay, (0, 0))
+            elif self.current_biome == "plains":
+                # Névoa ondulante
+                screen.blit(overlay, (0, 0))
+            elif self.current_biome == "avalanche":
+                # Névoa branca pesada na avalanche
+                screen.blit(self.overlays["snow"], (0, 0))
+                # Adiciona um segundo overlay para "branquear" mais a tela
+                snow_overlay = self.overlays["snow"].copy()
+                snow_overlay.set_alpha(100 + int(alpha_mod))
+                screen.blit(snow_overlay, (0, 0))
 
