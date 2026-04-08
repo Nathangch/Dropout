@@ -1,5 +1,6 @@
 import pygame
 import math
+from utils.utils import resource_path
 class Biome:
     def __init__(self, name, bg_color, friction, enemy_types, amplitude, frequency, variation):
         self.name = name
@@ -37,21 +38,21 @@ class BiomeManager:
         
         # Carregar Texturas de Chao Específicas
         try:
-            tex = pygame.image.load("assets/backgrounds/grama.png").convert_alpha()
+            tex = pygame.image.load(resource_path("assets/backgrounds/grama.png")).convert_alpha()
             h = min(200, tex.get_height())
             w = int(h * (tex.get_width() / tex.get_height()))
             self.grass_tex = pygame.transform.scale(tex, (w, h))
         except: self.grass_tex = None
 
         try:
-            t_sand = pygame.image.load("assets/backgrounds/areia.jpg").convert_alpha()
+            t_sand = pygame.image.load(resource_path("assets/backgrounds/areia.jpg")).convert_alpha()
             h = min(200, t_sand.get_height())
             w = int(h * (t_sand.get_width() / t_sand.get_height()))
             self.sand_tex = pygame.transform.scale(t_sand, (w, h))
         except: self.sand_tex = None
         
         try:
-            t_snow = pygame.image.load("assets/backgrounds/neve.jpg").convert_alpha()
+            t_snow = pygame.image.load(resource_path("assets/backgrounds/neve.jpg")).convert_alpha()
             h = min(200, t_snow.get_height())
             w = int(h * (t_snow.get_width() / t_snow.get_height()))
             self.snow_tex = pygame.transform.scale(t_snow, (w, h))

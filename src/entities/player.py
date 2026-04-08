@@ -1,5 +1,6 @@
 import pygame
 import math
+from utils.utils import resource_path
 
 class Player:
     _cached_idle_frames = None
@@ -42,7 +43,7 @@ class Player:
             try:
                 import os
                 # Idle
-                full_sheet = pygame.image.load("assets/sprites/idle.png").convert_alpha()
+                full_sheet = pygame.image.load(resource_path("assets/sprites/idle.png")).convert_alpha()
                 sheet_w = full_sheet.get_width()
                 sheet_h = full_sheet.get_height()
                 frame_w = sheet_w // 6
@@ -52,7 +53,7 @@ class Player:
                     Player._cached_idle_frames.append(scaled)
                     
                 # Dash
-                dash_sheet = pygame.image.load("assets/sprites/dash.png").convert_alpha()
+                dash_sheet = pygame.image.load(resource_path("assets/sprites/dash.png")).convert_alpha()
                 d_sheet_w = dash_sheet.get_width()
                 d_sheet_h = dash_sheet.get_height()
                 d_frame_w = d_sheet_w // 5
@@ -63,7 +64,7 @@ class Player:
                     
                 # Jump 
                 if not hasattr(Player, '_cached_jump_frames'): Player._cached_jump_frames = []
-                jump_sheet = pygame.image.load("assets/sprites/jump.png").convert_alpha()
+                jump_sheet = pygame.image.load(resource_path("assets/sprites/jump.png")).convert_alpha()
                 j_sheet_w = jump_sheet.get_width()
                 j_sheet_h = jump_sheet.get_height()
                 j_frame_w = j_sheet_w // 6
@@ -76,7 +77,7 @@ class Player:
             
             if not Player._cached_idle_frames:
                 try:
-                    img = pygame.image.load("assets/sprites/bode.png").convert_alpha()
+                    img = pygame.image.load(resource_path("assets/sprites/bode.png")).convert_alpha()
                     Player._cached_fallback_image = pygame.transform.scale(img, (60, 75))
                 except: pass
                 

@@ -1,5 +1,6 @@
 import pygame
 from core import state
+from utils.utils import resource_path
 
 def draw_wooden_panel(surface, rect, alpha=255):
     panel_surf = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
