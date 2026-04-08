@@ -23,7 +23,7 @@ class Player:
         
         self.max_stamina = 100
         self.stamina = 100
-        self.stamina_cost_dash = 30
+        self.stamina_cost_dash = 25
         self.stamina_recovery = 30.0 
         
         self.is_dashing = False
@@ -98,20 +98,21 @@ class Player:
         else:
             self.is_gliding = False
 
-        # 4. RECUPERAÇÃO DE ESTAMINA
+        # 4. RECUPERAÇÃO DE ESTAMINA E COOLDOWN
         if not self.is_dashing and not self.is_gliding:
             self.stamina += self.stamina_recovery * dt
             self.stamina = min(self.stamina, self.max_stamina)
-            if self.dash_cooldown > 0:
-                self.dash_cooldown -= dt
+        
+        if self.dash_cooldown > 0:
+            self.dash_cooldown -= dt
                 
         # 3. DASH
         if dash_pressed and not self.is_dashing and self.stamina >= self.stamina_cost_dash and self.dash_cooldown <= 0:
             self.is_dashing = True
             
-            from core import state
-            if hasattr(state, 'audio_system') and state.audio_system.get('dash'):
-                state.audio_system['dash'].play()
+            # from core import state
+            # if hasattr(state, 'audio_system') and state.audio_system.get('dash'):
+            #     state.audio_system['dash'].play()
                 
             self.dash_timer = self.dash_duration
             self.stamina -= self.stamina_cost_dash

@@ -29,10 +29,18 @@ class Camera:
         
     def update(self, player_rect, current_speed, dt, is_on_hole=False, current_ground_y=None):
         # A câmera foca primariamente no cenário/chão, bloqueando solavancos em pulos longos.
-        if not is_on_hole and current_ground_y is not None:
-            self.target_y = current_ground_y - 37
+        # A câmera foca primariamente no cenário/chão, bloqueando solavancos em pulos longos.
+        look_ahead_ground = current_ground_y
+        
+        if is_on_hole:
+            # Se cair no buraco, tenta olhar um pouco a frente para manter a camêra estável
+            # mas não despenca para o abismo.
+            pass
+            
+        if look_ahead_ground is not None:
+             self.target_y = look_ahead_ground - 37
         else:
-            # Caiu no buraco: não despencar a câmera para o abismo, deixar fixada na beira.
+            # Caso extremo de gap total: mantém a última altura alvo segura
             pass
         
         # LERP Suave (Follow delay)
@@ -110,8 +118,8 @@ def main():
         audio_system['fala1'] = load_sound("fala1.wav")
         audio_system['fala2'] = load_sound("fala2.mp3")
         audio_system['fala3'] = load_sound("fala3.wav")
-        audio_system['dash'] = load_sound("dash.wav")
-        if audio_system.get('dash'): audio_system['dash'].set_volume(0.2)
+        # audio_system['dash'] = load_sound("dash.wav")
+        # if audio_system.get('dash'): audio_system['dash'].set_volume(0.2)
         audio_system['intro'] = load_sound("intro.wav")
         audio_system['avalanche'] = load_sound("avalanche.wav")
         
@@ -183,7 +191,7 @@ def main():
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
                     jump_pressed = True
-                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT or event.key == pygame.K_x:
                     dash_pressed = True
                 elif event.key == pygame.K_ESCAPE:
                     if state.current_state == state.GameState.PLAYING:
@@ -263,6 +271,23 @@ def main():
                     if state.current_state == state.GameState.PLAYING:
                         reset_game(player, monster_manager, biome_manager, bg_manager, camera)
 
+        elif state.current_state == state.GameState.PAUSED:
+            if click_pos:
+                new_state = pause_ui.handle_click(click_pos)
+                if new_state == "PLAYING":
+                    state.current_state = state.GameState.PLAYING
+                    try: pygame.mixer.unpause()
+                    except: pass
+                elif new_state == "RESTART":
+                    state.current_state = state.GameState.PLAYING
+                    reset_game(player, monster_manager, biome_manager, bg_manager, camera)
+                    try: pygame.mixer.unpause()
+                    except: pass
+                elif new_state == "MENU":
+                    state.current_state = state.GameState.MENU
+                    try: pygame.mixer.stop()
+                    except: pass
+
         elif state.current_state == state.GameState.PLAYING:
             # 0. CONTROLAR ZOOM E ESTADOS ESPECIAIS (Avalanche)
             if biome_manager.is_avalanche:
@@ -274,7 +299,6 @@ def main():
             else:
                 camera.target_zoom = 1.0
                 
-            biome_manager.update(dt)
             # A velocidade real é a soma da velocidade base com o momentum do player
             raw_total_speed = biome_manager.current_speed + player.momentum
             
@@ -283,6 +307,9 @@ def main():
             if not hasattr(state, 'smooth_speed'): state.smooth_speed = raw_total_speed
             state.smooth_speed += (raw_total_speed - state.smooth_speed) * 0.8 * dt
             total_speed = state.smooth_speed
+            
+            # 0. UPDATE BIOME E DISTÂNCIA (Sincronizado)
+            biome_manager.update(dt, total_speed)
             
             # 0. VERIFICAR SE O BAÚ FOI ATINGIDO (Transição para Ending)
             collision_result = monster_manager.check_collision(player.rect)
@@ -310,9 +337,7 @@ def main():
             current_biome = biome_manager.get_current()
             
             # Aplicar momentum no movimento da camera
-            # Usamos a velocidade suavizada para evitar o tranco visual
-            momentum_contribution = (total_speed - biome_manager.current_speed)
-            biome_manager.camera_offset += momentum_contribution * dt
+            # (Removido incremento duplicado de offset aqui, ja tratado no biome.update)
             
             bg_manager.set_biome(current_biome.name)
             bg_manager.update(total_speed, dt)
@@ -325,36 +350,34 @@ def main():
             
             # Verificar se o jogador está sobre um buraco
             player_world_x = player.rect.centerx + biome_manager.camera_offset
+            raw_ground_y = biome_manager.get_raw_ground_height(player_world_x)
             current_ground_y = biome_manager.get_ground_height(player_world_x)
             is_on_hole = current_ground_y is None
             
-            camera.update(player.rect, total_speed, dt, is_on_hole, current_ground_y)
+            camera.update(player.rect, total_speed, dt, is_on_hole, raw_ground_y)
             
             # Suprimir monstros na reta final (deixa os monstros na avalanche)
             stop_monsters = biome_manager.start_phase or biome_manager.is_final_stretch
-            monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, stop_monsters)
+            monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.get_ground_slope, stop_monsters)
             
             # Efeito de Avalanche nas partículas
             particle_mode = "avalanche" if biome_manager.is_avalanche else current_biome.name
             particle_manager.update(dt, particle_mode, biome_manager.camera_offset, camera.y)
             
             # 1. VERIFICAR MORTE (COLISÃO OU QUEDA)
-            # Pegar altura bruta do terreno (incluindo o que estaria sob o buraco)
-            raw_ground_height = biome_manager.get_raw_ground_height(player_world_x)
-            
             # A morte ocorre se:
             # - Bateu em inimigo (collision_result == True)
             # - Caiu no buraco (está mais abaixo que o chão teórico)
             # - Foi engolido pela avalanche (se estiver muito à esquerda na tela)
             # - Caiu muito abaixo da tela (fallback)
-            player_screen_y = player.rect.centery + ((HEIGHT * 0.6) - camera.y)
+            player_screen_y = player.rect.centery * camera.zoom + ((HEIGHT * 0.8) - camera.y * camera.zoom)
             player_screen_x = (player.rect.centerx - 100) * camera.zoom + 100
             
             # Avalanche catch check: A frente da avalanche está em base_x ≈ 50
             is_caught_by_avalanche = biome_manager.is_avalanche and player_screen_x < 50
             
             if (collision_result == True or 
-                player.rect.top > raw_ground_height + 150 or 
+                player.rect.top > raw_ground_y + 150 or 
                 player_screen_y > HEIGHT + 150 or
                 is_caught_by_avalanche):
                 state.current_state = state.GameState.GAME_OVER

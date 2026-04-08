@@ -14,11 +14,11 @@ class Biome:
 import random
 BIOMES = [
     # Plains: Fluid (Referência)
-    Biome("plains", (20, 100, 180), friction=1.0, enemy_types=["wolf", "bird"], amplitude=70, frequency=0.003, variation=0.000002),
+    Biome("plains", (20, 100, 180), friction=1.0, enemy_types=["wolf"], amplitude=70, frequency=0.003, variation=0.000002),
     # Desert: Suavemente mais ondulado (Diferença mínima para evitar boost)
-    Biome("desert", (237, 201, 175), friction=1.0, enemy_types=["scorpion", "bird"], amplitude=78, frequency=0.0035, variation=0.000004),
+    Biome("desert", (237, 201, 175), friction=1.0, enemy_types=["scorpion"], amplitude=78, frequency=0.0035, variation=0.000004),
     # Snow: Montanhoso mas controlado
-    Biome("snow",   (200, 230, 255), friction=0.5, enemy_types=["ice_golem", "bird"], amplitude=90, frequency=0.004, variation=0.000005)
+    Biome("snow",   (200, 230, 255), friction=0.5, enemy_types=["ice_golem"], amplitude=90, frequency=0.004, variation=0.000005)
 ]
 
 class BiomeManager:
@@ -118,7 +118,7 @@ class BiomeManager:
         # Limpa gaps antigos
         self.gap_zones = [g for g in self.gap_zones if g[1] > self.camera_offset - 800]
         
-    def update(self, dt):
+    def update(self, dt, total_speed):
         self.time_elapsed += dt
         self.total_time_elapsed += dt
         
@@ -140,14 +140,14 @@ class BiomeManager:
         # 2. CALCULAR TARGET_SPEED (PROGRESSÃO LOGARÍTMICA)
         target_speed = self.base_speed + math.log(max(1, distance / 100.0 + 1)) * 45.0
         
-        # 3. LIMITADOR (REMOVIDOS MULTIPLICADORES DE BIOMA PARA EVITAR PULO DE VELOCIDADE)
+        # 3. LIMITADOR 
         target_speed = min(self.max_speed, target_speed)
             
-        # 4. INTERPOLAÇÃO DE VELOCIDADE
+        # 4. INTERPOLAÇÃO DE VELOCIDADE DA BASE
         self.current_speed += (target_speed - self.current_speed) * 1.2 * dt
         
-        # 6. ATUALIZAR CAMERA_OFFSET
-        self.camera_offset += self.current_speed * dt
+        # 6. ATUALIZAR CAMERA_OFFSET (Sincronizado com a velocidade total real)
+        self.camera_offset += total_speed * dt
         
         # 7. MANTER GAPS E START PHASE
         if self.camera_offset > self.start_distance_limit:
@@ -275,7 +275,12 @@ class BiomeManager:
         current_points = []
         step = int(4 * zoom) if zoom > 1.0 else 4
         
-        for x in range(0, int(screen_width / zoom) + 100, step):
+        # Calcular os limites de X para cobrir toda a tela (e margem de segurança) independente do zoom
+        # display_x = (x - 100) * zoom + 100  => x = (display_x - 100) / zoom + 100
+        start_x_iter = int(((-150) - 100) / zoom + 100) 
+        end_x_iter = int(((screen_width + 150) - 100) / zoom + 100)
+        
+        for x in range(start_x_iter, end_x_iter, step):
             world_x = x + self.camera_offset
             y = self.get_ground_height(world_x)
             

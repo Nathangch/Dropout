@@ -28,6 +28,7 @@ class Monster:
             
         self.vy = 0
         self.vx = 0
+        self.angle = 0 # Adicionado para inclinação
         
     def load_sprites(self):
         path = resource_path(f"assets/enemies/{self.m_type}/")
@@ -66,9 +67,9 @@ class Monster:
     def move(self, dt, camera_offset, get_ground_height):
         pass
 
-    def update(self, dt, camera_offset, get_ground_height):
+    def update(self, dt, camera_offset, get_ground_height, get_ground_slope=None):
         self.animate()
-        self.move(dt, camera_offset, get_ground_height)
+        self.move(dt, camera_offset, get_ground_height, get_ground_slope)
 
     def draw(self, surface, camera):
         zoom = camera.zoom
@@ -85,25 +86,52 @@ class Monster:
 class Wolf(Monster):
     def __init__(self, world_x, initial_ground_y):
         super().__init__(world_x, initial_ground_y, "wolf")
-        self.vx = 0
+        self.vx = -120 
         if self.frames:
+            # Removido flip True (estava invertido)
             self.frames = [pygame.transform.scale(f, (int(f.get_width()*0.55), int(f.get_height()*0.55))) for f in self.frames]
             self.image = self.frames[0]
             self.rect = self.image.get_rect()
             self.rect.centerx = world_x
             self.rect.bottom = initial_ground_y
 
-    def move(self, dt, camera_offset, get_ground_height):
+    def move(self, dt, camera_offset, get_ground_height, get_ground_slope=None):
         self.world_x += self.vx * dt
         self.rect.centerx = self.world_x - camera_offset
         self.apply_gravity_and_ground(dt, get_ground_height)
+        
+        # Acompanhar curvatura do terreno
+        if get_ground_slope:
+            slope = get_ground_slope(self.world_x)
+            target_angle = math.degrees(math.atan2(slope, 1))
+            self.angle += (target_angle - self.angle) * 10 * dt
+
+    def draw(self, surface, camera):
+        zoom = camera.zoom
+        offset_y = (surface.get_height() * 0.8) - camera.y * zoom
+        screen_x = (self.rect.x - 100) * zoom + 100
+        screen_y = self.rect.y * zoom + offset_y
+        
+        if self.image:
+            # Escalonar
+            draw_w = int(self.rect.width * zoom)
+            draw_h = int(self.rect.height * zoom)
+            scaled_img = pygame.transform.scale(self.image, (draw_w, draw_h))
+            
+            # Rotacionar com base no slope
+            rotated_img = pygame.transform.rotate(scaled_img, -self.angle)
+            rot_rect = rotated_img.get_rect(center=(int(screen_x + draw_w/2), int(screen_y + draw_h/2)))
+            surface.blit(rotated_img, rot_rect.topleft)
 
 class IceGolem(Monster):
     def __init__(self, world_x, initial_ground_y):
         super().__init__(world_x, initial_ground_y, "ice_golem")
-        self.vx = 100
+        self.vx = -160 # Agora ele anda para frente (esquerda)
+        if self.frames:
+            # Removido flip (estava invertido)
+            self.image = self.frames[0]
 
-    def move(self, dt, camera_offset, get_ground_height):
+    def move(self, dt, camera_offset, get_ground_height, get_ground_slope=None):
         self.world_x += self.vx * dt
         self.rect.centerx = self.world_x - camera_offset
         self.apply_gravity_and_ground(dt, get_ground_height)
@@ -113,13 +141,14 @@ class Scorpion(Monster):
         super().__init__(world_x, initial_ground_y, "scorpion")
         self.vx = -100
         if self.frames:
+            # Escalonar conforme solicitado (sem inverter)
             self.frames = [pygame.transform.scale(f, (int(f.get_width()*0.55), int(f.get_height()*0.55))) for f in self.frames]
             self.image = self.frames[0]
             self.rect = self.image.get_rect()
             self.rect.centerx = world_x
             self.rect.bottom = initial_ground_y
 
-    def move(self, dt, camera_offset, get_ground_height):
+    def move(self, dt, camera_offset, get_ground_height, get_ground_slope=None):
         self.world_x += self.vx * dt
         self.rect.centerx = self.world_x - camera_offset
         current_ground_y = get_ground_height(self.world_x)
@@ -132,7 +161,7 @@ class Scorpion(Monster):
         else:
             self.vy += 1500 * dt
             self.rect.y += self.vy * dt
-
+            
 class MonsterFactory:
     @staticmethod
     def create(m_type, world_x, initial_ground_y):
@@ -152,7 +181,7 @@ class MonsterManager:
         self.spawn_timer = 0
         self.final_chest = None
         
-    def update(self, dt, current_biome, current_speed, camera_offset, get_ground_height, start_phase=False):
+    def update(self, dt, current_biome, current_speed, camera_offset, get_ground_height, get_ground_slope=None, start_phase=False):
         self.spawn_timer -= dt
         if self.spawn_timer <= 0 and not start_phase and not self.final_chest:
             self.spawn(current_biome, camera_offset, get_ground_height)
@@ -160,7 +189,7 @@ class MonsterManager:
             self.spawn_timer = base_time + random.uniform(0.1, 1.2)
             
         for m in self.monsters:
-            m.update(dt, camera_offset, get_ground_height)
+            m.update(dt, camera_offset, get_ground_height, get_ground_slope)
             
         if self.final_chest:
             self.final_chest.update(camera_offset)
