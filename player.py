@@ -112,10 +112,12 @@ class Player:
         # 2. MOVIMENTO DASH HORIZONTAL
         if self.is_dashing:
             self.vy = 0 # Dash anula a queda temporalmente
+            self.rect.height = 30 # Abaixa para passar por baixo dos pássaros
             self.rect.x += self.dash_speed * dt
             self.dash_timer -= dt
             if self.dash_timer <= 0:
                 self.is_dashing = False
+                self.rect.height = 50 # Volta ao normal
         else:
             # Puxar o jogador lentamente de volta ao X padrão
             target_x = 100

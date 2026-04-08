@@ -30,10 +30,16 @@ class Monster:
             self.vx = 0
         elif m_type == "scorpion":
             self.vx = -100
-        elif m_type == "ice_golem":
-            self.vx = 100 # Moves slower than the camera
+        elif m_type == "bird":
+            self.vx = -180 # Voa mais rápido contra o player
         else:
             self.vx = 0
+            
+        # Posição inicial especial para pássaros
+        if m_type == "bird":
+            self.rect.top = initial_ground_y - 85
+            self.base_y_offset = -85
+            self.sine_offset = random.uniform(0, math.pi * 2)
             
     def load_sprites(self):
         path = resource_path(f"assets/enemies/{self.m_type}/")
@@ -67,6 +73,11 @@ class Monster:
                 if self.rect.bottom >= current_ground_y:
                     self.rect.bottom = current_ground_y
                     self.vy = random.uniform(-400, -200)
+            elif self.m_type == "bird":
+                # Mantém altura relativa ao chão com oscilação
+                self.sine_offset += 5 * dt
+                target_y = current_ground_y + self.base_y_offset + math.sin(self.sine_offset) * 15
+                self.rect.top = target_y
             else:
                 self.rect.bottom = current_ground_y
                 self.vy = 0
