@@ -13,11 +13,11 @@ class Biome:
 import random
 BIOMES = [
     # Plains: Fluid (Referência)
-    Biome("plains", (20, 100, 180), friction=1.0, enemy_types=["wolf"], amplitude=70, frequency=0.003, variation=0.000002),
+    Biome("plains", (20, 100, 180), friction=1.0, enemy_types=["wolf", "bird"], amplitude=70, frequency=0.003, variation=0.000002),
     # Desert: Suavemente mais ondulado (Diferença mínima para evitar boost)
-    Biome("desert", (237, 201, 175), friction=1.0, enemy_types=["scorpion"], amplitude=78, frequency=0.0035, variation=0.000004),
+    Biome("desert", (237, 201, 175), friction=1.0, enemy_types=["scorpion", "bird"], amplitude=78, frequency=0.0035, variation=0.000004),
     # Snow: Montanhoso mas controlado
-    Biome("snow",   (200, 230, 255), friction=0.5, enemy_types=["ice_golem"], amplitude=90, frequency=0.004, variation=0.000005)
+    Biome("snow",   (200, 230, 255), friction=0.5, enemy_types=["ice_golem", "bird"], amplitude=90, frequency=0.004, variation=0.000005)
 ]
 
 class BiomeManager:

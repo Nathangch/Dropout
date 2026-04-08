@@ -20,9 +20,10 @@ class Monster:
             self.rect.centerx = world_x 
             self.rect.top = initial_ground_y - self.image.get_height()
         else:
-            self.image = pygame.Surface((40, 40))
+            size = 30 if m_type == "bird" else 40
+            self.image = pygame.Surface((size, size))
             self.image.fill((255, 0, 0))
-            self.rect = pygame.Rect(0, initial_ground_y - 40, 40, 40)
+            self.rect = pygame.Rect(0, initial_ground_y - size, size, size)
             self.rect.centerx = world_x
             
         self.vy = 0
