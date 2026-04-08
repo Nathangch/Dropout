@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/backgrounds/menu_bg.jpg" alt="Dropout Banner" width="100%">
+
   
   <h1>🐐 DROPOUT</h1>
   <p><strong>A maldição musical. O silêncio absoluto. Uma corrida desenfreada pela sobrevivência.</strong></p>
@@ -25,9 +25,7 @@ Em busca do lendário **Berrante Silencioso**, Japeth precisará cruzar floresta
 - ⛅ **Clima Parallax Constante:** Mais de 5 camadas independentes de ilusão de profundidade compõem o horizonte com um complexo sistema de partículas independentes (Folhas, Poeira e Nevascas).
 - 🦇 **Hitboxes Inteligentes:** Caixas de colisão de monstros suavizadas em 40% nas margens perimetrais ("Fairness Logic") penalizando apenas erros reais sem ferir o jogador injustamente por pixels estéticos!
 
-<div align="center">
-  <img src="assets/sprites/idle.png" width="300">
-</div>
+
 
 ---
 
