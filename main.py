@@ -1,14 +1,17 @@
 import pygame
 import sys
 import os
-import state
-from ui import MenuUI, GameOverUI, EndingUI, StoryUI
-from biome import BiomeManager
-from player import Player
-from monster import MonsterManager
-from background import BackgroundManager
-from particles import ParticleManager
-from utils import resource_path
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+from core import state
+from ui.ui import MenuUI, GameOverUI, EndingUI, StoryUI, TutorialUI, OptionsUI, PauseUI
+from systems.biome import BiomeManager
+from entities.player import Player
+from entities.monster import MonsterManager
+from systems.background import BackgroundManager
+from systems.particles import ParticleManager
+from utils.utils import resource_path
 import random
 
 WIDTH = 800
@@ -24,17 +27,13 @@ class Camera:
         self.zoom = 1.0
         self.target_zoom = 1.0
         
-    def update(self, player_rect, current_speed, dt, is_on_hole=False):
-        # O player X é fixo na tela em ~100 mais variações de dash/momentum
-        # Mas aqui queremos seguir a posição Y principalmente para manter o enquadramento
-        
-        if not is_on_hole:
-            self.target_y = player_rect.centery
+    def update(self, player_rect, current_speed, dt, is_on_hole=False, current_ground_y=None):
+        # A câmera foca primariamente no cenário/chão, bloqueando solavancos em pulos longos.
+        if not is_on_hole and current_ground_y is not None:
+            self.target_y = current_ground_y - 37
         else:
-            # Se cair no buraco, a câmera para de descer mas pode seguir para cima
-            # (Caso o player pule para sair de um buraco antes de morrer)
-            if player_rect.centery < self.target_y:
-                self.target_y = player_rect.centery
+            # Caiu no buraco: não despencar a câmera para o abismo, deixar fixada na beira.
+            pass
         
         # LERP Suave (Follow delay)
         # Segue o player no Y para manter o enquadramento centralizado
@@ -48,6 +47,11 @@ class Camera:
         self.look_ahead += (target_look_ahead - self.look_ahead) * 2.0 * dt
 
 def reset_game(player, monster_manager, biome_manager, bg_manager, camera):
+    pygame.mixer.stop()
+    try:
+        pygame.mixer.music.play(-1)
+        from core import state; state.current_music_volume = 0 # LERPs to full gently on startup
+    except: pass
     biome_manager.reset()
     monster_manager.reset()
     bg_manager.current_bg = bg_manager.backgrounds["plains"]
@@ -71,6 +75,9 @@ def main():
     
     menu_ui = MenuUI(WIDTH, HEIGHT)
     game_over_ui = GameOverUI(WIDTH, HEIGHT)
+    tutorial_ui = TutorialUI(WIDTH, HEIGHT)
+    options_ui = OptionsUI(WIDTH, HEIGHT)
+    pause_ui = PauseUI(WIDTH, HEIGHT)
     biome_manager = BiomeManager()
     bg_manager = BackgroundManager()
     camera = Camera(WIDTH, HEIGHT)
@@ -86,17 +93,45 @@ def main():
     
     self_font_medium = font_medium # Local reference for main loop
     
-    # Sound initialization placeholder
+    # Sound initialization
+    audio_system = {}
     try:
         pygame.mixer.init()
-        # Se o usuário tiver um arquivo de som "sing.wav", ele tocará
-        # Caso contrário, ignoramos para não quebrar o jogo
-        sing_sound = None
+        pygame.mixer.set_num_channels(8) # Garante que temos canais suficientes
+        voice_channel = pygame.mixer.Channel(0) # Canal exclusivo para vozes/falas
+        audio_system['voice_channel'] = voice_channel
+        
+        def load_sound(name):
+            path = resource_path(f"assets/audio/{name}")
+            if os.path.exists(path):
+                return pygame.mixer.Sound(path)
+            return None
+            
+        audio_system['fala1'] = load_sound("fala1.wav")
+        audio_system['fala2'] = load_sound("fala2.mp3")
+        audio_system['fala3'] = load_sound("fala3.wav")
+        audio_system['dash'] = load_sound("dash.wav")
+        if audio_system.get('dash'): audio_system['dash'].set_volume(0.2)
+        audio_system['intro'] = load_sound("intro.wav")
+        audio_system['avalanche'] = load_sound("avalanche.wav")
+        
+        music_path = resource_path("assets/audio/theme.mp3")
+        if os.path.exists(music_path):
+            try:
+                pygame.mixer.music.load(music_path)
+                pygame.mixer.music.set_volume(state.music_volume)
+                pygame.mixer.music.play(-1) # Loop infinito
+            except Exception as e:
+                print(f"Error loading theme: {e}")
+                
+        # Kept the old success singing if needed
         sound_path = resource_path("assets/sing.wav")
-        if os.path.exists(sound_path):
-            sing_sound = pygame.mixer.Sound(sound_path)
-    except:
-        sing_sound = None
+        audio_system['sing'] = pygame.mixer.Sound(sound_path) if os.path.exists(sound_path) else None
+    except Exception as e:
+        print(f"Error loading audio: {e}")
+        
+    state.audio_system = audio_system
+    sing_sound = audio_system.get('sing')
     
     initial_y = biome_manager.get_ground_height(100 + biome_manager.camera_offset)
     if initial_y is None: initial_y = 400
@@ -109,7 +144,27 @@ def main():
     running = True
     while running:
         dt = clock.tick(60) / 1000.0
+        dt = min(dt, 0.05) # Limitador de tempo de frame para estabilidade e combate de spikes
         click_pos = None
+        
+        # --- AUDIO DUCKING (Smooth music volume) ---
+        if state.current_state not in [state.GameState.ENDING, state.GameState.GAME_OVER]:
+            if hasattr(state, 'audio_system') and 'voice_channel' in state.audio_system:
+                target_vol = state.music_volume
+                
+                # Diminui The Theme se o Voice Channel estiver rodando a introdução narrativa ou alguma fala do sapo/bode
+                if state.audio_system['voice_channel'].get_busy():
+                    target_vol = 0.0
+                    
+                if not hasattr(state, 'current_music_volume'):
+                    state.current_music_volume = state.music_volume
+                    
+                if abs(state.current_music_volume - target_vol) > 0.01:
+                    state.current_music_volume += (target_vol - state.current_music_volume) * 4.0 * dt
+                    try:
+                        pygame.mixer.music.set_volume(state.current_music_volume)
+                    except: pass
+        # ---------------------------------------------
         
         # 1. INPUT
         jump_pressed = False
@@ -119,14 +174,26 @@ def main():
             if event.type == pygame.QUIT:
                 state.current_state = state.GameState.EXIT
             
+            if state.current_state == state.GameState.OPTIONS:
+                options_ui.handle_event(event, pygame.mouse.get_pos())
+            
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 click_pos = event.pos
                 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
                     jump_pressed = True
-                elif event.key == pygame.K_x or event.key == pygame.K_LCTRL:
+                elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                     dash_pressed = True
+                elif event.key == pygame.K_ESCAPE:
+                    if state.current_state == state.GameState.PLAYING:
+                        state.current_state = state.GameState.PAUSED
+                        try: pygame.mixer.pause()
+                        except: pass
+                    elif state.current_state == state.GameState.PAUSED:
+                        state.current_state = state.GameState.PLAYING
+                        try: pygame.mixer.unpause()
+                        except: pass
                     
         keys = pygame.key.get_pressed()
 
@@ -141,12 +208,41 @@ def main():
                 if new_state:
                     state.current_state = getattr(state.GameState, new_state)
                     if state.current_state == state.GameState.PLAYING:
-                        reset_game(player, monster_manager, biome_manager, bg_manager, camera)
+                        state.current_state = state.GameState.PAUSED
+                        try: pygame.mixer.pause()
+                        except: pass
+                    elif state.current_state == state.GameState.PAUSED:
+                        state.current_state = state.GameState.PLAYING
+                        try: pygame.mixer.unpause()
+                        except: pass
+                elif new_state:
+                    try: pygame.mixer.unpause()
+                    except: pass
+                    state.current_state = getattr(state.GameState, new_state)
                         
+        elif state.current_state == state.GameState.TUTORIAL:
+            if click_pos:
+                new_state = tutorial_ui.handle_click(click_pos)
+                if new_state: state.current_state = getattr(state.GameState, new_state)
+                
+        elif state.current_state == state.GameState.OPTIONS:
+            if click_pos:
+                new_state = options_ui.handle_click(click_pos)
+                if new_state: state.current_state = getattr(state.GameState, new_state)
+
         elif state.current_state == state.GameState.STORY:
+            if not hasattr(state, 'intro_playing'):
+                state.intro_playing = True
+                if state.audio_system.get('intro') and state.audio_system.get('voice_channel'):
+                    # Toca a intro no canal exclusivo de vozes
+                    state.audio_system['voice_channel'].play(state.audio_system['intro'])
+                    
             if click_pos:
                 new_state = story_ui.handle_click(click_pos)
                 if new_state:
+                    if state.audio_system.get('voice_channel'):
+                        state.audio_system['voice_channel'].stop()
+                        
                     state.current_state = getattr(state.GameState, new_state)
                     if state.current_state == state.GameState.PLAYING:
                         reset_game(player, monster_manager, biome_manager, bg_manager, camera)
@@ -190,6 +286,13 @@ def main():
             
             # 0. VERIFICAR SE O BAÚ FOI ATINGIDO (Transição para Ending)
             collision_result = monster_manager.check_collision(player.rect)
+            
+            # Garantia de Forçar o Ending
+            current_player_world_x = player.rect.centerx + biome_manager.camera_offset
+            if monster_manager.final_chest and current_player_world_x > monster_manager.final_chest.world_x:
+                monster_manager.final_chest.opened = True
+                collision_result = "ENDING"
+                
             if collision_result == "ENDING":
                 state.current_state = state.GameState.ENDING
                 # Silenciar música de fundo
@@ -220,14 +323,15 @@ def main():
             # 2. UPDATES
             player.update(dt, biome_manager.camera_offset, biome_manager.get_ground_height, biome_manager.get_ground_slope)
             
-            # Verificar se o jogador está sobre um buraco para travar a descida da câmera
+            # Verificar se o jogador está sobre um buraco
             player_world_x = player.rect.centerx + biome_manager.camera_offset
-            is_on_hole = biome_manager.get_ground_height(player_world_x) is None
+            current_ground_y = biome_manager.get_ground_height(player_world_x)
+            is_on_hole = current_ground_y is None
             
-            camera.update(player.rect, total_speed, dt, is_on_hole)
+            camera.update(player.rect, total_speed, dt, is_on_hole, current_ground_y)
             
-            # Suprimir monstros na avalanche e reta final
-            stop_monsters = biome_manager.start_phase or biome_manager.is_avalanche or biome_manager.is_final_stretch
+            # Suprimir monstros na reta final (deixa os monstros na avalanche)
+            stop_monsters = biome_manager.start_phase or biome_manager.is_final_stretch
             monster_manager.update(dt, current_biome, total_speed, biome_manager.camera_offset, biome_manager.get_ground_height, stop_monsters)
             
             # Efeito de Avalanche nas partículas
@@ -254,6 +358,9 @@ def main():
                 player_screen_y > HEIGHT + 150 or
                 is_caught_by_avalanche):
                 state.current_state = state.GameState.GAME_OVER
+                pygame.mixer.stop()
+                try: pygame.mixer.music.stop()
+                except: pass
                 
             # 3. VERIFICAR SPAWN DO BAÚ FINAL
             # Agora o spawn ocorre no final da reta final (is_final_stretch)
@@ -265,13 +372,22 @@ def main():
                     monster_manager.spawn_final_chest(spawn_x, ground_y)
 
         # 3. RENDERING
+        # Limpar a tela para evitar efeito de "rastro" (sprites fantasmas)
+        screen.fill((135, 206, 235))
+        
         if state.current_state == state.GameState.MENU:
             menu_ui.draw(screen)
             
         elif state.current_state == state.GameState.STORY:
             story_ui.draw(screen)
             
-        elif state.current_state == state.GameState.PLAYING:
+        elif state.current_state == state.GameState.TUTORIAL:
+            tutorial_ui.draw(screen)
+            
+        elif state.current_state == state.GameState.OPTIONS:
+            options_ui.draw(screen)
+            
+        elif state.current_state in [state.GameState.PLAYING, state.GameState.PAUSED]:
             bg_manager.draw(screen)
             biome_manager.draw_ground(screen, camera)
             biome_manager.draw_avalanche(screen, camera)
@@ -282,6 +398,9 @@ def main():
             # Use pre-loaded font
             score_text = self_font_medium.render(f"Biome: {biome_manager.get_current().name.capitalize()} | Time: {int(biome_manager.total_time_elapsed)}s", True, (0,0,0))
             screen.blit(score_text, (10, 10))
+            
+            if state.current_state == state.GameState.PAUSED:
+                pause_ui.draw(screen)
             
         elif state.current_state == state.GameState.GAME_OVER:
             bg_manager.draw(screen)
