@@ -20,9 +20,10 @@ class Monster:
             self.rect.centerx = world_x # Will be shifted by screen later in display
             self.rect.top = initial_ground_y - self.image.get_height()
         else:
-            self.image = pygame.Surface((40, 40))
+            size = 30 if m_type == "bird" else 40
+            self.image = pygame.Surface((size, size))
             self.image.fill((255, 0, 0))
-            self.rect = pygame.Rect(0, initial_ground_y - 40, 40, 40)
+            self.rect = pygame.Rect(0, initial_ground_y - size, size, size)
             self.rect.centerx = world_x
             
         self.vy = 0
@@ -37,8 +38,8 @@ class Monster:
             
         # Posição inicial especial para pássaros
         if m_type == "bird":
-            self.rect.top = initial_ground_y - 85
-            self.base_y_offset = -85
+            self.rect.top = initial_ground_y - 110
+            self.base_y_offset = -110
             self.sine_offset = random.uniform(0, math.pi * 2)
             
     def load_sprites(self):
@@ -47,6 +48,8 @@ class Monster:
             for file in sorted(os.listdir(path)):
                 if file.endswith('.png'):
                     img = pygame.image.load(os.path.join(path, file)).convert_alpha()
+                    if self.m_type == "bird":
+                        img = pygame.transform.scale(img, (30, 30))
                     img = pygame.transform.flip(img, True, False)
                     self.frames.append(img)
                     
