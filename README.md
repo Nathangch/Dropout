@@ -54,12 +54,14 @@ Em busca do lendário **Berrante Silencioso**, Japeth precisará cruzar floresta
    pip install pygame
 
 4. Execute o jogo iniciando o pacote mestre:
-bash
-python main.py
+    ```bash
+    python main.py
+    
 🛠️ Arquitetura do Software
 O Dropout não é feito numa Engine fechada, foi construído em arquitetura raiz (Pygame) com extremo rigor a padronizações profissionais de Software Engineering:
 
 Decoupled Entities: Separação clara entre Renderização de Partículas, Mecânicas do Player, UI Automática Animada (LERP) e Sistemas de Bioma/Atrito.
 Factory Pattern: Todos os monstros são gerados de forma modular baseada numa fábrica autônoma que decide escalar sprites e recriar instâncias sem sujar o código do loop principal.
 Object Pooling: Tempestades de partículas são salvas e reutilizadas da memória RAM da sua máquina descartando "Garbage Collectors" do Python que causam travadas/engasgos (stutters).
+
 Feito com ❤️ por mentes curiosas, perseverança e dezenas de linhas de código.
