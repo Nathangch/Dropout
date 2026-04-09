@@ -42,13 +42,15 @@ class Player:
             if not hasattr(Player, '_cached_dash_frames'): Player._cached_dash_frames = []
             try:
                 import os
+                from utils.utils import resource_path
                 # Idle
                 full_sheet = pygame.image.load(resource_path("assets/sprites/idle.png")).convert_alpha()
                 sheet_w = full_sheet.get_width()
                 sheet_h = full_sheet.get_height()
-                frame_w = sheet_w // 6
                 for i in range(6):
-                    frame = full_sheet.subsurface(pygame.Rect(i*frame_w, 0, frame_w, sheet_h))
+                    x = int(i * sheet_w / 6)
+                    w = int((i + 1) * sheet_w / 6) - x
+                    frame = full_sheet.subsurface(pygame.Rect(x, 0, w, sheet_h))
                     scaled = pygame.transform.scale(frame, (60, 75))
                     Player._cached_idle_frames.append(scaled)
                     
@@ -56,9 +58,10 @@ class Player:
                 dash_sheet = pygame.image.load(resource_path("assets/sprites/dash.png")).convert_alpha()
                 d_sheet_w = dash_sheet.get_width()
                 d_sheet_h = dash_sheet.get_height()
-                d_frame_w = d_sheet_w // 5
                 for i in range(5):
-                    d_frame = dash_sheet.subsurface(pygame.Rect(i*d_frame_w, 0, d_frame_w, d_sheet_h))
+                    x = int(i * d_sheet_w / 5)
+                    w = int((i + 1) * d_sheet_w / 5) - x
+                    d_frame = dash_sheet.subsurface(pygame.Rect(x, 0, w, d_sheet_h))
                     d_scaled = pygame.transform.scale(d_frame, (60, 75))
                     Player._cached_dash_frames.append(d_scaled)
                     
@@ -67,9 +70,10 @@ class Player:
                 jump_sheet = pygame.image.load(resource_path("assets/sprites/jump.png")).convert_alpha()
                 j_sheet_w = jump_sheet.get_width()
                 j_sheet_h = jump_sheet.get_height()
-                j_frame_w = j_sheet_w // 6
                 for i in range(6):
-                    j_frame = jump_sheet.subsurface(pygame.Rect(i*j_frame_w, 0, j_frame_w, j_sheet_h))
+                    x = int(i * j_sheet_w / 6)
+                    w = int((i + 1) * j_sheet_w / 6) - x
+                    j_frame = jump_sheet.subsurface(pygame.Rect(x, 0, w, j_sheet_h))
                     j_scaled = pygame.transform.scale(j_frame, (60, 75))
                     Player._cached_jump_frames.append(j_scaled)
                     

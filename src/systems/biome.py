@@ -12,6 +12,7 @@ class Biome:
         self.variation = variation
 
 import random
+from utils.utils import resource_path
 BIOMES = [
     # Plains: Fluid (Referência)
     Biome("plains", (20, 100, 180), friction=1.0, enemy_types=["wolf"], amplitude=70, frequency=0.003, variation=0.000002),

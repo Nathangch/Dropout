@@ -37,9 +37,10 @@ class Monster:
             if len(files) == 1:
                 sheet = pygame.image.load(os.path.join(path, files[0])).convert_alpha()
                 sheet_w, sheet_h = sheet.get_size()
-                frame_w = sheet_w // 3
                 for i in range(3):
-                    frame = sheet.subsurface(pygame.Rect(i * frame_w, 0, frame_w, sheet_h))
+                    x = int(i * sheet_w / 3)
+                    w = int((i + 1) * sheet_w / 3) - x
+                    frame = sheet.subsurface(pygame.Rect(x, 0, w, sheet_h))
                     pass # removemos o flip forçado
                     self.frames.append(frame)
             else:
